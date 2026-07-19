@@ -247,7 +247,9 @@ public class ChaosModConfigScreen extends HandledScreen<ChaosModScreenHandler> {
             "timedPositionSwapEnabled", "forcedSprintEnabled", "periodicNegativeEffectEnabled",
             // v1.8.0 第52-55项效果
             "weaponSlipEnabled", "magmaBetrayalEnabled",
-            "timeReboundEnabled", "burdenCollapseEnabled"
+            "timeReboundEnabled", "burdenCollapseEnabled",
+            // v1.9.0 语音识别效果
+            "profanityPenaltyEnabled"
         };
         
         for (String key : keys) {
@@ -903,6 +905,7 @@ public class ChaosModConfigScreen extends HandledScreen<ChaosModScreenHandler> {
                 case "magmaBetrayalEnabled" -> "Random player's solid footing becomes magma for 10s";
                 case "timeReboundEnabled" -> "Return to the recorded position after 5s and lose 2 hearts";
                 case "burdenCollapseEnabled" -> "Inventory load is settled after 5s as damage and Slowness II";
+                case "profanityPenaltyEnabled" -> "Speak profanity into mic = lose hearts (needs Shriek mod)";
                 default -> "Unknown effect";
             };
         } else {
@@ -962,6 +965,7 @@ public class ChaosModConfigScreen extends HandledScreen<ChaosModScreenHandler> {
                 case "magmaBetrayalEnabled" -> "随机玩家脚下实体方块变成岩浆块10秒";
                 case "timeReboundEnabled" -> "5秒后回到记录位置并固定扣2颗心";
                 case "burdenCollapseEnabled" -> "5秒后按背包占用槽位扣血并获得缓慢II";
+                case "profanityPenaltyEnabled" -> "对麦克风说脏话=扣血，越多扣越多(需Shriek前置)";
                 default -> "未知效果";
             };
         }

@@ -24,7 +24,8 @@ public class ChaosModConfig {
         "movementTaxEnabled", "controlSeizurePlusEnabled", "jumpTaxEnabled",
         "forcedTetherEnabled", "hpAveragingEnabled", "multiplayerRouletteEnabled",
         "timedPositionSwapEnabled", "forcedSprintEnabled", "periodicNegativeEffectEnabled",
-        "weaponSlipEnabled", "magmaBetrayalEnabled", "timeReboundEnabled", "burdenCollapseEnabled"
+        "weaponSlipEnabled", "magmaBetrayalEnabled", "timeReboundEnabled", "burdenCollapseEnabled",
+        "profanityPenaltyEnabled"
     );
 
     public static final List<String> INTERVAL_KEYS = List.of(
@@ -113,6 +114,9 @@ public class ChaosModConfig {
     public boolean magmaBetrayalEnabled = false;           // 地面背叛：定时把随机玩家脚下方块临时变为岩浆块
     public boolean timeReboundEnabled = false;             // 时间回弹：5秒后回到原位并固定受到2颗心伤害
     public boolean burdenCollapseEnabled = false;          // 负重崩塌：提示5秒后按背包占用槽位结算伤害
+
+    // === v1.9.0 语音识别效果：共56种效果（需要客户端安装 Shriek 前置） ===
+    public boolean profanityPenaltyEnabled = false;        // 祸从口出：麦克风说脏话扣血，越多扣越多
 
     // === 可同步的触发间隔（秒）；默认值保持原硬编码行为 ===
     public int damageScapegoatIntervalSeconds = 300;
@@ -320,6 +324,7 @@ public class ChaosModConfig {
             case "magmaBetrayalEnabled": return magmaBetrayalEnabled;
             case "timeReboundEnabled": return timeReboundEnabled;
             case "burdenCollapseEnabled": return burdenCollapseEnabled;
+            case "profanityPenaltyEnabled": return profanityPenaltyEnabled;
             default: return false;
         }
     }
@@ -380,6 +385,7 @@ public class ChaosModConfig {
             case "magmaBetrayalEnabled": magmaBetrayalEnabled = value; break;
             case "timeReboundEnabled": timeReboundEnabled = value; break;
             case "burdenCollapseEnabled": burdenCollapseEnabled = value; break;
+            case "profanityPenaltyEnabled": profanityPenaltyEnabled = value; break;
             default: break;
         }
         markDirty();

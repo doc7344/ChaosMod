@@ -172,6 +172,16 @@ public class ChaosModClient implements ClientModInitializer {
 	
 	// Initialize RandomKeyPressManager
 	com.example.util.RandomKeyPressManager.initialize();
+	
+	// === v1.9.0 祸从口出：左上角语音字幕层（功能关闭或没有字幕时什么都不画） ===
+	net.fabricmc.fabric.api.client.rendering.v1.HudRenderCallback.EVENT.register(
+		(drawContext, tickCounter) -> com.example.util.SpeechSubtitleOverlay.render(drawContext)
+	);
+	
+	// v1.9.0 祸从口出：只有装了 Shriek 前置才接入语音识别（可选依赖）
+	if (net.fabricmc.loader.api.FabricLoader.getInstance().isModLoaded("shriek")) {
+		com.example.compat.ShriekClientIntegration.register();
+	}
 }
 
 	private static void resetConnectionState() {
@@ -197,6 +207,7 @@ public class ChaosModClient implements ClientModInitializer {
 
 		com.example.util.RandomKeyPressManager.cleanup();
 		com.example.util.WindowShakeSystem.resetWindowPosition();
+		com.example.util.SpeechSubtitleOverlay.clear();
 	}
 
 	/**

@@ -76,6 +76,7 @@
   "chaosmod.config.magmaBetrayalEnabled": "Magma Betrayal",
   "chaosmod.config.timeReboundEnabled": "Time Rebound",
   "chaosmod.config.burdenCollapseEnabled": "Burden Collapse",
+  "chaosmod.config.profanityPenaltyEnabled": "Cursed Tongue (Requires Shriek)",
   
   "chaosmod.effect.forced_tether_start": "You are forcibly tethered to %s! Stay within 15 blocks or both take damage!",
   "chaosmod.effect.forced_tether_too_far": "Too far! Taking damage!",
@@ -206,6 +207,7 @@
   "chaosmod.tooltip.magmaBetrayalEnabled": "Random player's solid footing becomes magma for 10s",
   "chaosmod.tooltip.timeReboundEnabled": "Return to the recorded position after 5s and lose 2 hearts",
   "chaosmod.tooltip.burdenCollapseEnabled": "Inventory load is settled after 5s as damage and Slowness II",
+  "chaosmod.tooltip.profanityPenaltyEnabled": "Speak profanity into mic = lose hearts (needs Shriek mod)",
   
   "chaosmod.electric_poison_damage": "Electric Poison Seizure: enjoy the shock treatment!",
   "chaosmod.effect.periodic_negative_effect": "Periodic negative effect: %s",

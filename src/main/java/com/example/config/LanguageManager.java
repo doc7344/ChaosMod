@@ -96,6 +96,9 @@ public class LanguageManager {
         CHINESE_LABELS.put("magmaBetrayalEnabled", "地面背叛");
         CHINESE_LABELS.put("timeReboundEnabled", "时间回弹");
         CHINESE_LABELS.put("burdenCollapseEnabled", "负重崩塌");
+
+        // v1.9.0 语音识别效果
+        CHINESE_LABELS.put("profanityPenaltyEnabled", "祸从口出(需Shriek前置)");
     }
     
     // 英文标签
@@ -164,6 +167,9 @@ public class LanguageManager {
         ENGLISH_LABELS.put("magmaBetrayalEnabled", "Magma Betrayal");
         ENGLISH_LABELS.put("timeReboundEnabled", "Time Rebound");
         ENGLISH_LABELS.put("burdenCollapseEnabled", "Burden Collapse");
+
+        // v1.9.0 语音识别效果
+        ENGLISH_LABELS.put("profanityPenaltyEnabled", "Cursed Tongue (Requires Shriek)");
     }
     
     // UI 文本
@@ -411,6 +417,7 @@ public class LanguageManager {
                 case "periodic_negative_effect" -> "Periodic negative effect: %s";
                 case "burden_collapse_warning" -> "Your load is crushing you... settlement in 5 seconds";
                 case "burden_collapse_result" -> "Load settlement: %d occupied slots, took %.1f hearts of damage";
+                case "profanity_penalty_result" -> "Cursed tongue! %d profanities detected, lost %.1f hearts";
                 // v1.7.0 Electric Hell-Grade Effects Messages
                 case "touch_hell_activated" -> "Touch Hell activated! Teleported to lava pool!";
                 case "movement_tax_damage" -> "Movement Tax: -0.5 hearts";
@@ -484,6 +491,7 @@ public class LanguageManager {
                 case "periodic_negative_effect" -> "你获得了周期负面效果：%s";
                 case "burden_collapse_warning" -> "负重正在压垮你……5秒后结算";
                 case "burden_collapse_result" -> "负重结算：%d个槽位，受到%.1f颗心伤害";
+                case "profanity_penalty_result" -> "祸从口出！检测到%d句脏话，扣除%.1f颗心";
                 // v1.7.0 电击地狱级效果消息
                 case "touch_hell_activated" -> "触控地狱激活！传送到岩浆池！";
                 case "movement_tax_damage" -> "移动税：-0.5心";

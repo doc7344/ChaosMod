@@ -1,4 +1,4 @@
-# 🔥 ChaosMod for Minecraft 1.21 - DG_LAB Special Edition ⚡ v1.7.0-Release
+# 🔥 ChaosMod for Minecraft 1.21 - DG_LAB Special Edition ⚡ v1.9.0-Release
 
 **Language**: [🇺🇸 English](README.md) | [🇨🇳 中文](README_CN.md)
 
@@ -10,7 +10,7 @@ This is a **ultimate torture mod specifically designed to work with DG_LAB X Min
 
 ---
 
-## 💀 50 Evil Effects - Your Nightmare Checklist
+## 💀 56 Evil Effects - Your Nightmare Checklist
 
 ### 🎯 Basic Torture Kit
 1. **🔴 All Mobs Hostile** - Even chickens want to kill you! No safe zones!
@@ -81,6 +81,16 @@ This is a **ultimate torture mod specifically designed to work with DG_LAB X Min
 48. **🎰 Multiplayer Roulette** - **Every 90 seconds one player triggers Russian roulette**! 5-second countdown then lottery: 60% safe, 25% self-damage 3♥, 10% random other 5♥, 5% **everyone takes 2♥**! **Collective gambling game**!
 49. **🔄 Timed Position Swap** - **Every 60 seconds two players swap positions after 5-second warning**! Can run to lava edge during warning to trap others! **Tactical position trap**!
 50. **🏃 Forced Sprint** - **Every 90 seconds one player must keep moving for 60 seconds**! Stop >3 seconds starts **0.5♥ damage every 2 seconds**! Can't mine, open chests, or craft while stationary! **Forced movement punishment**!
+
+### 🌪️ v1.8.0 Deeper Multiplayer Betrayal + Timed Terror - 55 Effects!
+51. **🌩️ Periodic Negative Effects** - **Every set interval (default 60s), receive one random purely-harmful status effect**! Poison, wither, blindness, nausea... **only bad, never good**! Scheduled suffering rations!
+52. **🗡️ Weapon Slip** - **Melee hits on hostile mobs have a chance (default 20%) to fling your main-hand weapon out of your grip**! Swords, axes, maces, tridents all apply! Your weapon is **suddenly gone mid-fight**! Durability and enchantments fully preserved — go pick it up yourself!
+53. **🌋 Magma Betrayal** - **Every set interval (default 90s), a random player's footing block silently turns into a magma block** for 10 seconds before restoring! **No warning, no hint** — your feet just start burning! Sneaking prevents damage (vanilla magma mechanics)!
+54. **⏪ Time Rebound** - **Every set interval (default 90s), records a random player's position, then drags them back there 5 seconds later** with a fixed **2 hearts** of damage! All that running for nothing! **The malice of time reversal**!
+55. **📦 Burden Collapse** - **Every set interval (default 90s), picks a random player, warns via ActionBar, then 5 seconds later settles damage based on occupied inventory slots**: base 1 heart, +0.5 hearts per 5 occupied slots, capped at 5 hearts, plus Slowness II! **The more you hoard, the harder you fall**!
+
+### 🎤 v1.9.0 Voice Recognition Revolution - 56 Effects Beyond Dimensions!
+56. **🤬 Cursed Tongue** - **The first effect in history that understands your swearing**! Requires the **Shriek voice recognition library** on the client (Chinese offline model auto-downloads on first launch, ~42MB)! Everything you say into your microphone is displayed in real-time at the **top-left of your screen** (max 3 lines, fades after 5 seconds)! Once **Chinese profanity** is detected (built-in word list, fully editable), you lose health instantly: **1 heart per profanity, capped at 5 hearts per sentence**! The dirtier you swear, the harder you bleed! Combine with shock devices for the perfect **"swear once, get zapped once"** feedback loop! Creative and spectator modes are immune!
 
 > ⚠️ **IMPORTANT SECURITY NOTICE**: The 40th effect "Desktop Prank Invasion" will **record and display player's real IP address** in desktop generated files. We **DO NOT collect, store, or transmit** any player IP information in the background. All IP retrieval is **local real-time operation** and only written to **your own computer's desktop files**. Please **use this effect with caution** and ensure your gaming environment is secure and trustworthy. If you decide to use this feature, please ensure:
 > - **DO NOT enable this effect in public network environments**
@@ -205,6 +215,12 @@ Press 'P' Key   # Open bilingual config GUI (Admin only)
 | `multiplayerRouletteEnabled` | 🎰 **Multiplayer Roulette** | ⚡⚡⚡⚡⚡ |
 | `timedPositionSwapEnabled` | 🔄 **Timed Position Swap** | ⚡⚡⚡⚡⚡ |
 | `forcedSprintEnabled` | 🏃 **Forced Sprint** | ⚡⚡⚡⚡⚡ |
+| `periodicNegativeEffectEnabled` | 🌩️ **Periodic Negative Effects** | ⚡⚡⚡⚡⚡ |
+| `weaponSlipEnabled` | 🗡️ **Weapon Slip** | ⚡⚡⚡⚡⚡ |
+| `magmaBetrayalEnabled` | 🌋 **Magma Betrayal** | ⚡⚡⚡⚡⚡ |
+| `timeReboundEnabled` | ⏪ **Time Rebound** | ⚡⚡⚡⚡⚡ |
+| `burdenCollapseEnabled` | 📦 **Burden Collapse** | ⚡⚡⚡⚡⚡ |
+| `profanityPenaltyEnabled` | 🤬 **Cursed Tongue (Requires Shriek)** | 🎤🎤🎤🎤🎤 |
 
 ---
 
@@ -212,7 +228,7 @@ Press 'P' Key   # Open bilingual config GUI (Admin only)
 
 ### 📋 **Method 1: Manual Effect Selection**
 1. Press `P` key to open config GUI
-2. Browse through 50 evil effects list
+2. Browse through 56 evil effects list
 3. Click the effect switches you want
 4. Enjoy the pain experience!
 
@@ -239,6 +255,16 @@ Press 'P' Key   # Open bilingual config GUI (Admin only)
 - Fabric Loader
 - Fabric API  
 - **A brave heart** (optional, will be destroyed soon anyway)
+
+### 🎤 Extra Requirements for Cursed Tongue (Effect #56)
+Want the "swear = lose health" experience? Both client and server also need:
+- [Architectury API](https://modrinth.com/mod/architectury-api) (required by Shriek)
+- [Shriek](https://modrinth.com/mod/shriek) (offline voice recognition library powered by Vosk)
+
+On first launch the **Chinese recognition model (~42MB) downloads automatically**; afterwards everything runs fully offline — no network, no voice upload.
+Without these two mods, the other 55 effects work perfectly fine; only Cursed Tongue stays inactive.
+The profanity word list lives at `config/chaosmod_profanity_words.txt` on the server, one word per line — server owners can freely edit it, restart to apply.
+Hold `V` (Shriek's default keybind) to temporarily mute your microphone.
 
 ---
 
@@ -507,6 +533,24 @@ When multiple people play together with shock devices:
 ---
 
 ## 📝 Update Log
+
+### v1.9.0-Release - "Voice Recognition Revolution: Cursed Tongue! 56 Effects Beyond Dimensions!" 🎤🤬⚡
+- 🤬 **NEW: Cursed Tongue** - The first effect in history that understands your swearing! Speak Chinese profanity into your mic and lose health instantly: 1 heart per profanity, capped at 5 hearts per sentence!
+- 🎤 **NEW: Real-time Voice Subtitles** - Everything you say appears at the top-left of your screen! Max 3 lines, auto-fades after 5 seconds, never floods your screen!
+- 📚 **NEW: Editable Profanity Word List** - `config/chaosmod_profanity_words.txt` on the server with 60+ built-in common Chinese profanities and homophone variants; server owners can freely add/remove words!
+- 🔌 **NEW: Optional Shriek Integration** - Powered by the Vosk offline recognition engine, Chinese model auto-downloads on first launch (~42MB), then runs fully offline — no network, no upload! Without the mod installed, the other 55 effects are completely unaffected!
+- 🛡️ **Server-Authoritative Settlement** - Damage goes through the direct-damage isolation channel; it can't be intercepted by Damage Scapegoat, Random Transfer, or Delayed Damage — the one who swears pays the price!
+- 🧹 **Complete State Cleanup** - Subtitles auto-clear on disconnect/server switch; disabling the effect immediately stops detection and display!
+
+### v1.8.0-Release - "Deeper Multiplayer Betrayal + Timed Terror: 55 Effects!" 🌪️🗡️🌋
+- 🌩️ **NEW: Periodic Negative Effects** - Every set interval, receive one random purely-harmful status effect — only bad, never good!
+- 🗡️ **NEW: Weapon Slip** - Melee hits on hostile mobs have a chance to fling your weapon out of your grip! Swords, axes, maces, tridents all apply; durability and enchantments fully preserved!
+- 🌋 **NEW: Magma Betrayal** - Periodically turns a random player's footing block into a magma block for 10 seconds with zero warning, then restores it!
+- ⏪ **NEW: Time Rebound** - Periodically records a random player's position and drags them back 5 seconds later with a fixed 2 hearts of damage!
+- 📦 **NEW: Burden Collapse** - Warns via ActionBar, then settles damage 5 seconds later based on occupied inventory slots — the more you hoard, the harder you fall, plus Slowness II!
+- 🔄 **REWORKED: Shared Health & Hunger** - Rebuilt from "damage mirroring" into a true server-wide shared health/hunger/saturation state; damage counts once, regeneration and starvation no longer multiply!
+- 🐛 **FIXED: All Mobs Hostile villager speed anomaly** - Removed hardcoded chase speeds; now reuses vanilla AI's real movement multipliers, villagers no longer sprint like rockets!
+- ⚙️ **NEW: Interval & Chance Sliders** - 12 timed effects support 5-600s interval tuning, Weapon Slip supports 1%-100% chance tuning; sliders are draggable with arrow-key ±1 fine-tuning!
 
 ### v1.7.0-Release - "Electric Hell-Grade + Multiplayer Betrayal Innovation: 50 Effects Ultimate Breakthrough!" ⚡💜🔥
 - 💜 **NEW: Electric Poison Seizure** - Fixed trigger every 2 minutes! Poison II effect 10s + 0.5♥ damage! Dark purple bold chat notification! Most stable electric rhythm device!

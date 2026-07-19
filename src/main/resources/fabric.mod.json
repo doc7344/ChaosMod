@@ -1,9 +1,9 @@
 {
   "schemaVersion": 1,
   "id": "chaosmod",
-  "version": "1.8.0",
+  "version": "1.9.0",
   "name": "Chaos Mod 1.21",
-  "description": "55 chaos effects, including server-authoritative multiplayer effects, synchronized settings, multilingual UI, and admin permission controls.",
+  "description": "56 chaos effects, including voice-recognition profanity penalty, server-authoritative multiplayer effects, synchronized settings, multilingual UI, and admin permission controls.",
   "environment": "*",
   "entrypoints": {
     "main": [
@@ -20,5 +20,8 @@
   "depends": {
     "fabricloader": ">=0.15.0",
     "fabric": "*"
+  },
+  "suggests": {
+    "shriek": "*"
   }
 }

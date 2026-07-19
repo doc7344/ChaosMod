@@ -76,6 +76,7 @@
   "chaosmod.config.magmaBetrayalEnabled": "地面背叛",
   "chaosmod.config.timeReboundEnabled": "时间回弹",
   "chaosmod.config.burdenCollapseEnabled": "负重崩塌",
+  "chaosmod.config.profanityPenaltyEnabled": "祸从口出(需Shriek前置)",
   
   "chaosmod.electric_poison_damage": "电击中毒癫痫：享受电击治疗！",
   "chaosmod.effect.periodic_negative_effect": "你获得了周期负面效果：%s",
@@ -210,5 +211,6 @@
   "chaosmod.tooltip.weaponSlipEnabled": "近战命中敌对生物时概率丢出主手武器",
   "chaosmod.tooltip.magmaBetrayalEnabled": "随机玩家脚下实体方块变成岩浆块10秒",
   "chaosmod.tooltip.timeReboundEnabled": "5秒后回到记录位置并固定扣2颗心",
-  "chaosmod.tooltip.burdenCollapseEnabled": "5秒后按背包占用槽位扣血并获得缓慢II"
+  "chaosmod.tooltip.burdenCollapseEnabled": "5秒后按背包占用槽位扣血并获得缓慢II",
+  "chaosmod.tooltip.profanityPenaltyEnabled": "对麦克风说脏话=扣血，越多扣越多(需Shriek前置)"
 }

@@ -92,6 +92,7 @@ public class ChaosModInit implements ModInitializer {
         LABELS.put("magmaBetrayalEnabled", "地面背叛");
         LABELS.put("timeReboundEnabled", "时间回弹");
         LABELS.put("burdenCollapseEnabled", "负重崩塌");
+        LABELS.put("profanityPenaltyEnabled", "祸从口出");
     }
 
     @Override
@@ -173,6 +174,8 @@ public class ChaosModInit implements ModInitializer {
         // Initialize scapegoat system on server start
         net.fabricmc.fabric.api.event.lifecycle.v1.ServerLifecycleEvents.SERVER_STARTED.register(server -> {
             com.example.util.ScapegoatSystem.loadScapegoatFromPersistentState(server);
+            // v1.9.0: 加载祸从口出脏话词库（不存在时写入默认词库）
+            com.example.util.ProfanityPenaltySystem.loadWordList();
         });
         net.fabricmc.fabric.api.event.lifecycle.v1.ServerLifecycleEvents.SERVER_STOPPING.register(
             com.example.util.AdditionalChaosEffects::shutdown
@@ -250,6 +253,13 @@ public class ChaosModInit implements ModInitializer {
                             })))
             );
         });
+
+        // v1.9.0: 祸从口出——只有装了 Shriek 前置才接入语音监听（可选依赖）
+        if (net.fabricmc.loader.api.FabricLoader.getInstance().isModLoaded("shriek")) {
+            com.example.compat.ShriekServerIntegration.register();
+        } else {
+            System.out.println("[ChaosMod] 未检测到 Shriek 前置，祸从口出功能不可用（其余功能不受影响）");
+        }
 
         // Player water -> lava 50% (only player-placed water)
         UseBlockCallback.EVENT.register((player, world, hand, hit) -> {

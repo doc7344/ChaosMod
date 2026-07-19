@@ -16,7 +16,15 @@ repositories {
     // Loom adds the essential maven repositories to download Minecraft and libraries from automatically.
     // See https://docs.gradle.org/current/userguide/declaring_repositories.html
     // for more information about repositories.
-    
+
+    // Modrinth maven：用于拉取 Shriek 语音识别前置（仅编译期，可选依赖）
+    maven {
+        name = "Modrinth"
+        url = "https://api.modrinth.com/maven"
+        content {
+            includeGroup "maven.modrinth"
+        }
+    }
 }
 
 loom {
@@ -39,6 +47,10 @@ dependencies {
 
     // Fabric API. This is technically optional, but you probably want it anyway.
     modImplementation "net.fabricmc.fabric-api:fabric-api:${project.fabric_version}"
+
+    // Shriek 语音转文字前置（祸从口出功能）。只参与编译，不打包：
+    // 运行时通过 FabricLoader.isModLoaded("shriek") 判断是否启用相关功能
+    modCompileOnly "maven.modrinth:shriek:${project.shriek_version}"
 
 }
 
