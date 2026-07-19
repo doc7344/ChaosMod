@@ -16,6 +16,7 @@ public abstract class EnderDragonDeathMixin {
     private void chaos$dragonKillerDies(DamageSource source, CallbackInfo ci) {
         if (!ChaosMod.config.enderDragonKillEnabled) return;
         LivingEntity self = (LivingEntity)(Object)this;
+        if (self.getWorld().isClient()) return;
         if (self instanceof EnderDragonEntity) {
             if (source != null && source.getAttacker() instanceof PlayerEntity player) {
                 player.kill();

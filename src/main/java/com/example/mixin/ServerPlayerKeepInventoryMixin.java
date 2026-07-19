@@ -11,7 +11,7 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 /**
  * 按用户要求实现：
  *  - 末地：已在 PlayerEntityDropInventoryMixin 中强制掉落
- *  - 其他维度：保持原版行为，不需要额外处理
+ *  - 其他维度：强制保留物品
  */
 @Mixin(ServerPlayerEntity.class)
 public abstract class ServerPlayerKeepInventoryMixin {
@@ -26,7 +26,8 @@ public abstract class ServerPlayerKeepInventoryMixin {
         if (oldPlayer.getWorld().getRegistryKey() == World.END) {
             // 末地死亡：确保新玩家背包为空（物品已通过 PlayerEntityDropInventoryMixin 掉落）
             self.getInventory().clear();
+        } else if (!alive) {
+            self.getInventory().clone(oldPlayer.getInventory());
         }
-        // 其他维度：保持原版行为，不做任何修改
     }
 }

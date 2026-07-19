@@ -14,7 +14,7 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 /**
  * 按用户要求实现：
  *  - 末地：不管 GameRules.KEEP_INVENTORY 值，强制执行 dropInventory() 原始逻辑
- *  - 其他维度：保持原版行为
+ *  - 其他维度：强制保留物品
  */
 @Mixin(PlayerEntity.class)
 public abstract class PlayerEntityDropInventoryMixin {
@@ -31,8 +31,8 @@ public abstract class PlayerEntityDropInventoryMixin {
             // 复制 LivingEntity.dropInventory() 的代码逻辑（强制掉落）
             chaos$forceLivingEntityDropInventory(self);
         } else {
-            // 其他维度：保持原版行为（不做任何修改，让原版逻辑执行）
-            return;
+            // 其他维度：阻止死亡掉落，由copyFrom强制复制背包。
+            ci.cancel();
         }
     }
 

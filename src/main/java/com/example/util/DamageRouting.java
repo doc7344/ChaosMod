@@ -19,7 +19,7 @@ import java.util.*;
 import java.util.concurrent.ThreadLocalRandom;
 
 /**
- * Extend routing: if original victim is burning (on fire), mirrored/split/transfer recipients
+ * Extend routing: if original victim is burning (on fire), split/transfer recipients
  * also get a short on-fire effect so the visuals are consistent with the source of damage.
  * (Still no knockback for environmental sources.)
  */
@@ -28,6 +28,8 @@ public final class DamageRouting {
 
     private static final Map<Entity, Integer> CONTACT_CD = new WeakHashMap<>();
     private static final ThreadLocal<Boolean> REENTRY = ThreadLocal.withInitial(() -> Boolean.FALSE);
+    private static final ThreadLocal<Boolean> DIRECT_DAMAGE = ThreadLocal.withInitial(() -> Boolean.FALSE);
+    private static final ThreadLocal<Boolean> RANDOM_TRANSFER_HANDLED = ThreadLocal.withInitial(() -> Boolean.FALSE);
     private static final Map<PlayerEntity, Integer> NO_HEAL = new WeakHashMap<>();
     private static final Map<PlayerEntity, Boolean> BELOW_THRESHOLD = new WeakHashMap<>();
     
@@ -85,13 +87,21 @@ public final class DamageRouting {
 
     public static boolean routePlayerDamage(PlayerEntity victim, DamageSource source, float amount) {
         if (REENTRY.get()) return false;
-        if (shouldBlockRouting(victim)) return false;
+        if (DIRECT_DAMAGE.get()) return false;
+        if (victim.getWorld().isClient()) return false;
+        if (!(victim instanceof ServerPlayerEntity serverVictim)) return false;
+        if (victim.isCreative() || victim.isSpectator()) return false;
 
-        ServerWorld sw = (ServerWorld) victim.getWorld();
-        List<ServerPlayerEntity> online = new ArrayList<>(sw.getPlayers());
+        // 随机转移必须覆盖中毒、凋零等持续伤害。其他旧路由模式仍保留原过滤规则。
+        boolean randomTransferEnabled = ChaosMod.config.randomDamageEnabled;
+        if (!randomTransferEnabled && shouldBlockRouting(victim)) return false;
 
         List<ServerPlayerEntity> participants = new ArrayList<>();
-        for (ServerPlayerEntity p : online) if (!shouldBlockRouting(p)) participants.add(p);
+        for (ServerPlayerEntity p : serverVictim.getServer().getPlayerManager().getPlayerList()) {
+            if (!p.isAlive() || p.isCreative() || p.isSpectator()) continue;
+            if (!randomTransferEnabled && shouldBlockRouting(p)) continue;
+            participants.add(p);
+        }
 
         boolean kbAllowed = shouldApplyKnockbackForSource(source);
 
@@ -99,30 +109,27 @@ public final class DamageRouting {
         if (ChaosMod.config.sharedDamageSplitEnabled && !participants.isEmpty()) {
             int n = participants.size();
             float each = Math.max(0.0f, amount / n);
-            boolean anyDead = false;
             try {
                 REENTRY.set(Boolean.TRUE);
                 for (ServerPlayerEntity p : participants) {
                     p.damage(source, each);
-                    if (kbAllowed && p != victim) routedKnockback(p, source, victim);
+                    if (kbAllowed && p != victim && p.getWorld() == victim.getWorld()) routedKnockback(p, source, victim);
                     if (p != victim) propagateOnFireIfNeeded(victim, p);
                 }
-                for (ServerPlayerEntity p : participants) {
-                    if (p.isDead() || p.getHealth() <= 0f) { anyDead = true; break; }
-                }
-                if (anyDead) for (ServerPlayerEntity p : participants) if (!p.isDead()) p.kill();
             } finally { REENTRY.set(Boolean.FALSE); }
             return true;
         }
 
         // Random transfer (may pick victim)
-        if (ChaosMod.config.randomDamageEnabled && !participants.isEmpty()) {
+        if (randomTransferEnabled && !participants.isEmpty()) {
             ServerPlayerEntity pick = participants.get(ThreadLocalRandom.current().nextInt(participants.size()));
             try {
+                RANDOM_TRANSFER_HANDLED.set(Boolean.TRUE);
                 REENTRY.set(Boolean.TRUE);
                 pick.damage(source, amount);
-                if (kbAllowed && pick != victim) routedKnockback(pick, source, victim);
-                if (pick != victim) propagateOnFireIfNeeded(victim, pick);
+                if (kbAllowed && pick != victim && pick.getWorld() == victim.getWorld()) routedKnockback(pick, source, victim);
+                // 只转移当前伤害事件，不复制原玩家的燃烧状态。否则会生成第二条独立火焰伤害链，
+                // 表现为原玩家和目标玩家同时持续掉血。
             } finally { REENTRY.set(Boolean.FALSE); }
             return true;
         }
@@ -133,13 +140,13 @@ public final class DamageRouting {
             List<ServerPlayerEntity> group = new ArrayList<>();
             for (ServerPlayerEntity p : participants) {
                 if (p == victim) continue;
+                if (p.getWorld() != victim.getWorld()) continue;
                 if (p.squaredDistanceTo(victim) <= R*R) group.add(p);
             }
             if (!group.isEmpty()) {
                 group.add((ServerPlayerEntity) victim);
                 int n = group.size();
                 float each = Math.max(0.0f, amount / n);
-                boolean anyDead = false;
                 try {
                     REENTRY.set(Boolean.TRUE);
                     for (ServerPlayerEntity p : group) {
@@ -147,31 +154,24 @@ public final class DamageRouting {
                         if (kbAllowed && p != victim) routedKnockback(p, source, victim);
                         if (p != victim) propagateOnFireIfNeeded(victim, p);
                     }
-                    for (ServerPlayerEntity p : group) {
-                        if (p.isDead() || p.getHealth() <= 0f) { anyDead = true; break; }
-                    }
-                    if (anyDead) for (ServerPlayerEntity p : group) if (!p.isDead()) p.kill();
                 } finally { REENTRY.set(Boolean.FALSE); }
                 return true;
             }
         }
 
-        // Shared health (mirror others; don't cancel original)
-        if (ChaosMod.config.sharedHealthEnabled && !participants.isEmpty()) {
-            try {
-                REENTRY.set(Boolean.TRUE);
-                for (ServerPlayerEntity p : participants) {
-                    if (p != victim) {
-                        p.damage(source, amount);
-                        if (kbAllowed) routedKnockback(p, source, victim);
-                        propagateOnFireIfNeeded(victim, p);
-                    }
-                }
-            } finally { REENTRY.set(Boolean.FALSE); }
-            return false;
-        }
-
         return false;
+    }
+
+    /** 在一次自定义怪物攻击前清空标记，避免读取到其他伤害事件留下的状态。 */
+    public static void beginRandomTransferProbe() {
+        RANDOM_TRANSFER_HANDLED.set(Boolean.FALSE);
+    }
+
+    /** 返回本次攻击是否已被随机转移处理，并立即清空标记。 */
+    public static boolean consumeRandomTransferHandled() {
+        boolean handled = RANDOM_TRANSFER_HANDLED.get();
+        RANDOM_TRANSFER_HANDLED.set(Boolean.FALSE);
+        return handled;
     }
 
     private static void routedKnockback(PlayerEntity target, DamageSource source, PlayerEntity originalVictim) {
@@ -216,6 +216,11 @@ public final class DamageRouting {
     }
 
     public static void tickNoHeal(PlayerEntity p) {
+        if (!ChaosMod.config.lowHealthNoHealEnabled) {
+            NO_HEAL.remove(p);
+            BELOW_THRESHOLD.remove(p);
+            return;
+        }
         Integer left = NO_HEAL.get(p);
         if (left == null) return;
         left -= 1;
@@ -240,6 +245,7 @@ public final class DamageRouting {
     }
 
     public static boolean isNoHeal(PlayerEntity p) {
+        if (!ChaosMod.config.lowHealthNoHealEnabled) return false;
         Integer left = NO_HEAL.get(p);
         return left != null && left > 0;
     }
@@ -271,6 +277,11 @@ public final class DamageRouting {
     
     /** Tick reverse damage system for a player */
     public static void tickReverseDamage(PlayerEntity player) {
+        if (!ChaosMod.config.reverseDamageEnabled) {
+            LAST_DAMAGE_TIME.remove(player);
+            REVERSE_DAMAGE_COUNTER.remove(player);
+            return;
+        }
         if (!shouldApplyReverseDamage(player)) return;
         
         Integer counter = REVERSE_DAMAGE_COUNTER.getOrDefault(player, 0);
@@ -306,7 +317,10 @@ public final class DamageRouting {
     
     /** Tick sunburn system for a player */
     public static void tickSunburn(PlayerEntity player) {
-        if (!ChaosMod.config.sunburnEnabled) return;
+        if (!ChaosMod.config.sunburnEnabled) {
+            LAST_SUNBURN_DAMAGE_TIME.remove(player);
+            return;
+        }
         if (player.isCreative() || player.isSpectator()) return;
         if (player.getWorld().isClient()) return;
         
@@ -363,6 +377,28 @@ public final class DamageRouting {
                 }
             }
         }
+    }
+
+    public static boolean isDirectDamage() {
+        return DIRECT_DAMAGE.get();
+    }
+
+    public static boolean applyDirectDamage(LivingEntity entity, DamageSource source, float amount) {
+        boolean previous = DIRECT_DAMAGE.get();
+        try {
+            DIRECT_DAMAGE.set(Boolean.TRUE);
+            return entity.damage(source, amount);
+        } finally {
+            DIRECT_DAMAGE.set(previous);
+        }
+    }
+
+    public static void cleanupPlayer(PlayerEntity player) {
+        NO_HEAL.remove(player);
+        BELOW_THRESHOLD.remove(player);
+        LAST_DAMAGE_TIME.remove(player);
+        REVERSE_DAMAGE_COUNTER.remove(player);
+        LAST_SUNBURN_DAMAGE_TIME.remove(player);
     }
     
     // === Fall Trap System Methods (Legacy) ===

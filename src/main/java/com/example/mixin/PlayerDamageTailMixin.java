@@ -11,10 +11,12 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfoReturnable;
 
 @Mixin(PlayerEntity.class)
 public abstract class PlayerDamageTailMixin {
+    private static final ThreadLocal<Boolean> CHAOS_SHIELD_REENTRY = ThreadLocal.withInitial(() -> false);
     @Inject(method = "damage", at = @At("TAIL"))
     private void chaos$onDamageEnd(DamageSource source, float amount, CallbackInfoReturnable<Boolean> cir) {
         PlayerEntity p = (PlayerEntity)(Object)this;
         if (p.getWorld().isClient()) return;
+        if (com.example.util.DamageRouting.isDirectDamage()) return;
         
         // 只有在实际受到伤害时才触发（返回值为true）
         if (cir.getReturnValue()) {
@@ -25,7 +27,7 @@ public abstract class PlayerDamageTailMixin {
             ChaosEffects.handleRandomEffects(p);
             
             // 痛觉扩散：标记为带电状态
-            ChaosEffects.markElectrified(p);
+            com.example.util.PainSpreadSystem.markElectrified(p);
             
             // === 新增的混沌效果 ===
             // 惊惧磁铁：标记受伤玩家进入磁化状态
@@ -38,10 +40,15 @@ public abstract class PlayerDamageTailMixin {
         // 盾牌削弱（原有功能）
         if (!ChaosMod.config.shieldNerfEnabled) return;
         if (amount <= 0) return;
-        // If the player is currently blocking, add 20% penetration
-        if (p.isBlocking()) {
+        if (p.isBlocking() && p.blockedByShield(source)) {
             float extra = amount * 0.20f;
-            p.damage(p.getDamageSources().generic(), extra);
+            try {
+                CHAOS_SHIELD_REENTRY.set(true);
+                // generic 属于 bypasses_armor，且该标签被 bypasses_shield 引用，保证20%真正穿盾。
+                com.example.util.DamageRouting.applyDirectDamage(p, p.getDamageSources().generic(), extra);
+            } finally {
+                CHAOS_SHIELD_REENTRY.set(false);
+            }
         }
     }
 }

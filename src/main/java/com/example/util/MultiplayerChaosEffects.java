@@ -21,6 +21,38 @@ import java.util.concurrent.ThreadLocalRandom;
 public final class MultiplayerChaosEffects {
     private MultiplayerChaosEffects() {}
 
+    private static MinecraftServer stateServer;
+
+    private static long intervalTicks(int seconds) {
+        return seconds * 20L;
+    }
+
+    private static void ensureServerState(MinecraftServer server) {
+        if (stateServer == server) {
+            return;
+        }
+
+        stateServer = server;
+        activeTethers.clear();
+        activeSprints.clear();
+        currentRoulette = null;
+        currentSwap = null;
+
+        long currentTime = server.getTicks();
+        lastTetherTime = currentTime;
+        lastHPAveragingTime = currentTime;
+        lastRouletteTime = currentTime;
+        lastSwapTime = currentTime;
+        lastSprintTime = currentTime;
+    }
+
+    private static List<ServerPlayerEntity> eligiblePlayers(MinecraftServer server) {
+        return server.getPlayerManager().getPlayerList().stream()
+            .filter(ServerPlayerEntity::isAlive)
+            .filter(p -> !p.isCreative() && !p.isSpectator())
+            .toList();
+    }
+
     // ==================== 强制捆绑系统 ====================
     
     private static class TetherPair {
@@ -46,20 +78,24 @@ public final class MultiplayerChaosEffects {
     
     private static final List<TetherPair> activeTethers = new ArrayList<>();
     private static long lastTetherTime = 0;
-    private static final long TETHER_INTERVAL = 2400; // 120秒 = 2400 ticks
     private static final long TETHER_DURATION = 1800; // 90秒 = 1800 ticks
     
     /**
      * 强制捆绑：每120秒随机选2个玩家绑定90秒
      */
     public static void tickForcedTether(MinecraftServer server) {
-        if (!ChaosMod.config.forcedTetherEnabled) return;
+        ensureServerState(server);
+        if (!ChaosMod.config.forcedTetherEnabled) {
+            activeTethers.clear();
+            lastTetherTime = server.getTicks();
+            return;
+        }
         
-        long currentTime = server.getOverworld().getTime();
+        long currentTime = server.getTicks();
         
         // 每120秒触发一次新捆绑
-        if (currentTime - lastTetherTime >= TETHER_INTERVAL) {
-            List<ServerPlayerEntity> players = server.getPlayerManager().getPlayerList();
+        if (currentTime - lastTetherTime >= intervalTicks(ChaosMod.config.forcedTetherIntervalSeconds)) {
+            List<ServerPlayerEntity> players = eligiblePlayers(server);
             if (players.size() >= 2) {
                 ServerPlayerEntity p1 = players.get(ThreadLocalRandom.current().nextInt(players.size()));
                 ServerPlayerEntity p2;
@@ -129,7 +165,7 @@ public final class MultiplayerChaosEffects {
                 continue;
             }
             
-            // 使用squaredDistanceTo方法进行距离检测（与贴身平摊相同的方法）
+            // 不同维度没有可比较的欧氏距离，按“无法靠近”处理，但不跨维度绘制粒子。
             final double MAX_DISTANCE = 15.0;
             final double MAX_DISTANCE_SQUARED = MAX_DISTANCE * MAX_DISTANCE; // 225.0
             
@@ -137,22 +173,20 @@ public final class MultiplayerChaosEffects {
             Vec3d pos1 = player1.getPos();
             Vec3d pos2 = player2.getPos();
             
-            // 安全获取距离（即使玩家死亡也能计算）
-            double distanceSquared;
-            try {
-                distanceSquared = player1.squaredDistanceTo(player2);
-            } catch (Exception e) {
-                // 如果无法计算距离，假设距离过远
-                distanceSquared = MAX_DISTANCE_SQUARED + 1.0;
-            }
+            boolean sameWorld = player1.getWorld() == player2.getWorld();
+            double distanceSquared = sameWorld
+                ? player1.squaredDistanceTo(player2)
+                : Double.POSITIVE_INFINITY;
             
             // 绘制粒子连线（基于UUID存储的实时位置）
             // 每5 ticks绘制一次，与主逻辑同步
-            try {
-                drawParticleLine(player1.getServerWorld(), 
-                    pos1.add(0, 1, 0), 
-                    pos2.add(0, 1, 0));
-            } catch (Exception ignored) {}
+            if (sameWorld) {
+                try {
+                    drawParticleLine(player1.getServerWorld(),
+                        pos1.add(0, 1, 0),
+                        pos2.add(0, 1, 0));
+                } catch (Exception ignored) {}
+            }
             
             // 距离判定和扣血（完全独立于粒子）
             if (distanceSquared > MAX_DISTANCE_SQUARED) {
@@ -201,7 +235,8 @@ public final class MultiplayerChaosEffects {
      */
     private static void drawParticleLine(ServerWorld world, Vec3d start, Vec3d end) {
         double distance = start.distanceTo(end);
-        int particles = (int) (distance * 2); // 每0.5格一个粒子
+        // 远距离玩家不能按每0.5格无限生成粒子，否则可在多人服制造海量粒子包。
+        int particles = Math.max(1, Math.min(64, (int) Math.ceil(distance * 2)));
         
         for (int i = 0; i < particles; i++) {
             double t = i / (double) particles;
@@ -219,18 +254,21 @@ public final class MultiplayerChaosEffects {
     // ==================== 血量平均系统 ====================
     
     private static long lastHPAveragingTime = 0;
-    private static final long HP_AVERAGING_INTERVAL = 1200; // 60秒 = 1200 ticks
     
     /**
      * 血量平均：每60秒随机两人血量强制平均
      */
     public static void tickHPAveraging(MinecraftServer server) {
-        if (!ChaosMod.config.hpAveragingEnabled) return;
+        ensureServerState(server);
+        if (!ChaosMod.config.hpAveragingEnabled) {
+            lastHPAveragingTime = server.getTicks();
+            return;
+        }
         
-        long currentTime = server.getOverworld().getTime();
+        long currentTime = server.getTicks();
         
-        if (currentTime - lastHPAveragingTime >= HP_AVERAGING_INTERVAL) {
-            List<ServerPlayerEntity> players = server.getPlayerManager().getPlayerList();
+        if (currentTime - lastHPAveragingTime >= intervalTicks(ChaosMod.config.hpAveragingIntervalSeconds)) {
+            List<ServerPlayerEntity> players = eligiblePlayers(server);
             if (players.size() >= 2) {
                 ServerPlayerEntity p1 = players.get(ThreadLocalRandom.current().nextInt(players.size()));
                 ServerPlayerEntity p2;
@@ -300,19 +338,23 @@ public final class MultiplayerChaosEffects {
     
     private static RouletteData currentRoulette = null;
     private static long lastRouletteTime = 0;
-    private static final long ROULETTE_INTERVAL = 1800; // 90秒 = 1800 ticks
     
     /**
      * 死亡轮盘：每90秒随机一人触发轮盘抽奖
      */
     public static void tickMultiplayerRoulette(MinecraftServer server) {
-        if (!ChaosMod.config.multiplayerRouletteEnabled) return;
+        ensureServerState(server);
+        if (!ChaosMod.config.multiplayerRouletteEnabled) {
+            currentRoulette = null;
+            lastRouletteTime = server.getTicks();
+            return;
+        }
         
-        long currentTime = server.getOverworld().getTime();
+        long currentTime = server.getTicks();
         
         // 触发新轮盘
-        if (currentRoulette == null && currentTime - lastRouletteTime >= ROULETTE_INTERVAL) {
-            List<ServerPlayerEntity> players = server.getPlayerManager().getPlayerList();
+        if (currentRoulette == null && currentTime - lastRouletteTime >= intervalTicks(ChaosMod.config.multiplayerRouletteIntervalSeconds)) {
+            List<ServerPlayerEntity> players = eligiblePlayers(server);
             if (!players.isEmpty()) {
                 ServerPlayerEntity trigger = players.get(ThreadLocalRandom.current().nextInt(players.size()));
                 currentRoulette = new RouletteData(trigger, currentTime + 100); // 5秒后执行
@@ -398,10 +440,9 @@ public final class MultiplayerChaosEffects {
             
         } else if (roll < 0.95) {
             // 10% - 随机他人受伤
-            List<ServerPlayerEntity> others = new ArrayList<>();
-            for (ServerPlayerEntity p : server.getPlayerManager().getPlayerList()) {
-                if (p != trigger) others.add(p);
-            }
+            List<ServerPlayerEntity> others = eligiblePlayers(server).stream()
+                .filter(p -> p != trigger)
+                .toList();
             
             if (!others.isEmpty()) {
                 ServerPlayerEntity victim = others.get(ThreadLocalRandom.current().nextInt(others.size()));
@@ -432,7 +473,7 @@ public final class MultiplayerChaosEffects {
             
         } else {
             // 5% - 全服受伤
-            for (ServerPlayerEntity p : server.getPlayerManager().getPlayerList()) {
+            for (ServerPlayerEntity p : eligiblePlayers(server)) {
                 p.damage(p.getDamageSources().magic(), 4.0F); // 2颗心
                 p.sendMessage(Text.literal(
                     com.example.config.LanguageManager.getMessage("roulette_all_damage")
@@ -466,19 +507,23 @@ public final class MultiplayerChaosEffects {
     
     private static SwapData currentSwap = null;
     private static long lastSwapTime = 0;
-    private static final long SWAP_INTERVAL = 1200; // 60秒 = 1200 ticks
     
     /**
      * 定时位置互换：每60秒随机两人交换位置
      */
     public static void tickTimedPositionSwap(MinecraftServer server) {
-        if (!ChaosMod.config.timedPositionSwapEnabled) return;
+        ensureServerState(server);
+        if (!ChaosMod.config.timedPositionSwapEnabled) {
+            currentSwap = null;
+            lastSwapTime = server.getTicks();
+            return;
+        }
         
-        long currentTime = server.getOverworld().getTime();
+        long currentTime = server.getTicks();
         
         // 触发新交换
-        if (currentSwap == null && currentTime - lastSwapTime >= SWAP_INTERVAL) {
-            List<ServerPlayerEntity> players = server.getPlayerManager().getPlayerList();
+        if (currentSwap == null && currentTime - lastSwapTime >= intervalTicks(ChaosMod.config.timedPositionSwapIntervalSeconds)) {
+            List<ServerPlayerEntity> players = eligiblePlayers(server);
             if (players.size() >= 2) {
                 ServerPlayerEntity p1 = players.get(ThreadLocalRandom.current().nextInt(players.size()));
                 ServerPlayerEntity p2;
@@ -616,7 +661,6 @@ public final class MultiplayerChaosEffects {
     
     private static final List<SprintData> activeSprints = new ArrayList<>();
     private static long lastSprintTime = 0;
-    private static final long SPRINT_INTERVAL = 1800; // 90秒 = 1800 ticks
     private static final long SPRINT_DURATION = 1200; // 60秒 = 1200 ticks
     private static final double MOVEMENT_THRESHOLD = 0.01; // 移动阈值
     private static final int STOP_THRESHOLD = 60; // 3秒 = 60 ticks
@@ -625,13 +669,18 @@ public final class MultiplayerChaosEffects {
      * 强制奔跑：每90秒随机一人必须持续移动
      */
     public static void tickForcedSprint(MinecraftServer server) {
-        if (!ChaosMod.config.forcedSprintEnabled) return;
+        ensureServerState(server);
+        if (!ChaosMod.config.forcedSprintEnabled) {
+            activeSprints.clear();
+            lastSprintTime = server.getTicks();
+            return;
+        }
         
-        long currentTime = server.getOverworld().getTime();
+        long currentTime = server.getTicks();
         
         // 触发新强制奔跑
-        if (currentTime - lastSprintTime >= SPRINT_INTERVAL) {
-            List<ServerPlayerEntity> players = server.getPlayerManager().getPlayerList();
+        if (currentTime - lastSprintTime >= intervalTicks(ChaosMod.config.forcedSprintIntervalSeconds)) {
+            List<ServerPlayerEntity> players = eligiblePlayers(server);
             if (!players.isEmpty()) {
                 ServerPlayerEntity target = players.get(ThreadLocalRandom.current().nextInt(players.size()));
                 SprintData data = new SprintData(target, currentTime + SPRINT_DURATION);
@@ -738,4 +787,3 @@ public final class MultiplayerChaosEffects {
         }
     }
 }
-

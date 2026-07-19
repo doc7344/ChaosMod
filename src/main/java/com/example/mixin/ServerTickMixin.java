@@ -13,9 +13,6 @@ public class ServerTickMixin {
     private void chaos$serverTick(CallbackInfo ci) {
         MinecraftServer server = (MinecraftServer)(Object)this;
         
-        // 背锅人系统（原有）
-        com.example.util.ChaosEffects.tickScapegoat(server);
-        
         // 眩晕背锅侠系统（新增）
         com.example.util.ChaosEffects.tickVertigoScapegoat(server);
     }

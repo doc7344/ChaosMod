@@ -4,16 +4,19 @@ import com.example.ChaosMod;
 import com.example.config.LanguageManager;
 import com.example.network.ConfigToggleC2SPacket;
 import com.example.screen.ChaosModScreenHandler;
+import net.fabricmc.fabric.api.client.networking.v1.ClientPlayNetworking;
 import com.example.util.AIEffectCombinations;
 import com.example.util.AIEffectCombinationsEN;
 // import net.fabricmc.fabric.api.client.networking.v1.ClientPlayNetworking; // Simplified
 import net.minecraft.client.gui.DrawContext;
 import net.minecraft.client.gui.screen.ingame.HandledScreen;
 import net.minecraft.client.gui.widget.ButtonWidget;
+import net.minecraft.client.gui.widget.SliderWidget;
 import net.minecraft.client.gui.tooltip.Tooltip;
 import net.minecraft.entity.player.PlayerInventory;
 import net.minecraft.text.Text;
 import net.minecraft.util.Formatting;
+import org.lwjgl.glfw.GLFW;
 
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
@@ -27,9 +30,13 @@ public class ChaosModConfigScreen extends HandledScreen<ChaosModScreenHandler> {
     private static final int BUTTON_SPACING = 24; // MC 标准间距
     
     private final List<ButtonWidget> configButtons = new ArrayList<>();
-    private final boolean hasPermission;
+    private final List<IntervalSlider> intervalSliders = new ArrayList<>();
+    private final List<PercentageSlider> percentageSliders = new ArrayList<>();
+    private IntervalSlider draggedIntervalSlider;
+    private PercentageSlider draggedPercentageSlider;
+    private boolean hasPermission;
     private int currentPage = 0;
-    private final int itemsPerPage = 10; // 每页显示的按钮数（减少一些避免重叠）
+    private final int itemsPerPage = 6;
     private int totalPages;
     
     // AI随机效果组合管理
@@ -43,11 +50,25 @@ public class ChaosModConfigScreen extends HandledScreen<ChaosModScreenHandler> {
         this.backgroundHeight = 256; // MC 标准高度
     }
     
+    public void applyServerSync(boolean hasPermission) {
+        boolean permissionChanged = this.hasPermission != hasPermission;
+        this.hasPermission = hasPermission;
+        if (permissionChanged) {
+            this.clearAndInit();
+        } else {
+            updateButtonTexts();
+        }
+    }
+
     @Override
     protected void init() {
         super.init();
         
         this.configButtons.clear();
+        this.intervalSliders.clear();
+        this.percentageSliders.clear();
+        this.draggedIntervalSlider = null;
+        this.draggedPercentageSlider = null;
         
         if (!hasPermission) {
             // 渲染"无管理员权限无法设置"的受限页面
@@ -82,7 +103,7 @@ public class ChaosModConfigScreen extends HandledScreen<ChaosModScreenHandler> {
     
     private void initMainMenuStyle() {
         int centerX = this.width / 2;
-        int startY = 50; // 提高起始位置，因为没有标题了，但为语言按钮留出空间
+        int startY = 50;
         
         // 语言切换按钮
         this.addDrawableChild(ButtonWidget.builder(
@@ -96,19 +117,16 @@ public class ChaosModConfigScreen extends HandledScreen<ChaosModScreenHandler> {
         // 计算总页数
         totalPages = (currentLabels.size() + itemsPerPage - 1) / itemsPerPage;
         
-        // 按照 MC 主菜单风格排列当前页的配置按钮
+        // 当前页的配置按钮；带间隔参数的项目在按钮下方显示滑块。
         List<Map.Entry<String, String>> entries = new ArrayList<>(currentLabels.entrySet());
         int startIndex = currentPage * itemsPerPage;
         int endIndex = Math.min(startIndex + itemsPerPage, entries.size());
         
+        int yPos = startY;
         for (int i = startIndex; i < endIndex; i++) {
             Map.Entry<String, String> entry = entries.get(i);
             String key = entry.getKey();
             String label = entry.getValue();
-            
-            // 修复布局问题：使用正确的相对位置计算
-            int relativeIndex = i - startIndex; // 在当前页的相对位置
-            int yPos = startY + relativeIndex * BUTTON_SPACING;
             
             ButtonWidget button = ButtonWidget.builder(
                 getButtonText(key, label),
@@ -120,11 +138,40 @@ public class ChaosModConfigScreen extends HandledScreen<ChaosModScreenHandler> {
             
             this.addDrawableChild(button);
             this.configButtons.add(button);
+
+            String intervalKey = getIntervalKey(key);
+            if (intervalKey != null) {
+                IntervalSlider slider = new IntervalSlider(
+                    centerX - BUTTON_WIDTH / 2,
+                    yPos + BUTTON_HEIGHT + 2,
+                    BUTTON_WIDTH,
+                    BUTTON_HEIGHT,
+                    intervalKey
+                );
+                this.addDrawableChild(slider);
+                this.intervalSliders.add(slider);
+                yPos += 46;
+            } else {
+                String percentageKey = getPercentageKey(key);
+                if (percentageKey != null) {
+                    PercentageSlider slider = new PercentageSlider(
+                        centerX - BUTTON_WIDTH / 2,
+                        yPos + BUTTON_HEIGHT + 2,
+                        BUTTON_WIDTH,
+                        BUTTON_HEIGHT,
+                        percentageKey
+                    );
+                    this.addDrawableChild(slider);
+                    this.percentageSliders.add(slider);
+                    yPos += 46;
+                } else {
+                    yPos += BUTTON_SPACING;
+                }
+            }
         }
         
         // 控制按钮 - MC 风格底部布局
-        int actualItems = Math.min(itemsPerPage, endIndex - startIndex);
-        int bottomY = startY + actualItems * BUTTON_SPACING + 30; // 增加间距
+        int bottomY = yPos + 8;
         
         // 分页按钮（如果需要的话）
         if (totalPages > 1) {
@@ -197,7 +244,10 @@ public class ChaosModConfigScreen extends HandledScreen<ChaosModScreenHandler> {
             "controlSeizurePlusEnabled", "jumpTaxEnabled",
             // v1.8.0 多人互坑效果
             "forcedTetherEnabled", "hpAveragingEnabled", "multiplayerRouletteEnabled",
-            "timedPositionSwapEnabled", "forcedSprintEnabled"
+            "timedPositionSwapEnabled", "forcedSprintEnabled", "periodicNegativeEffectEnabled",
+            // v1.8.0 第52-55项效果
+            "weaponSlipEnabled", "magmaBetrayalEnabled",
+            "timeReboundEnabled", "burdenCollapseEnabled"
         };
         
         for (String key : keys) {
@@ -239,6 +289,31 @@ public class ChaosModConfigScreen extends HandledScreen<ChaosModScreenHandler> {
         
         return Text.literal(label + " [" + state + "]").formatted(color);
     }
+
+    private String getIntervalKey(String configKey) {
+        return switch (configKey) {
+            case "damageScapegoatEnabled" -> "damageScapegoatIntervalSeconds";
+            case "vertigoScapegoatEnabled" -> "vertigoScapegoatIntervalSeconds";
+            case "randomKeyPressEnabled" -> "randomKeyPressIntervalSeconds";
+            case "forcedTetherEnabled" -> "forcedTetherIntervalSeconds";
+            case "hpAveragingEnabled" -> "hpAveragingIntervalSeconds";
+            case "multiplayerRouletteEnabled" -> "multiplayerRouletteIntervalSeconds";
+            case "timedPositionSwapEnabled" -> "timedPositionSwapIntervalSeconds";
+            case "forcedSprintEnabled" -> "forcedSprintIntervalSeconds";
+            case "periodicNegativeEffectEnabled" -> "periodicNegativeEffectIntervalSeconds";
+            case "magmaBetrayalEnabled" -> "magmaBetrayalIntervalSeconds";
+            case "timeReboundEnabled" -> "timeReboundIntervalSeconds";
+            case "burdenCollapseEnabled" -> "burdenCollapseIntervalSeconds";
+            default -> null;
+        };
+    }
+
+    private String getPercentageKey(String configKey) {
+        return switch (configKey) {
+            case "weaponSlipEnabled" -> "weaponSlipChancePercent";
+            default -> null;
+        };
+    }
     
     private void toggleConfig(String key) {
         boolean current = ChaosMod.config.get(key);
@@ -249,12 +324,7 @@ public class ChaosModConfigScreen extends HandledScreen<ChaosModScreenHandler> {
             return; // 如果互斥检查失败，不允许开启
         }
         
-        // 立即更新本地配置以提供即时反馈
-        ChaosMod.config.set(key, newValue);
-        
-        // 在集成服务器中，直接调用服务端方法
-        // 在专用服务器中需要实现 C2S 网络包
-        // ConfigToggleC2SPacket.updateConfig(key, newValue, serverPlayer);
+        ClientPlayNetworking.send(new ConfigToggleC2SPacket(key, newValue));
         
         // 更新按钮文本
         updateButtonTexts();
@@ -268,7 +338,7 @@ public class ChaosModConfigScreen extends HandledScreen<ChaosModScreenHandler> {
         // 定义互斥的效果组
         String[] mutexGroup = {
             "playerDamageShareEnabled",  // 贴身平摊伤害
-            "sharedHealthEnabled",       // 共享生命(镜像)
+            "sharedHealthEnabled",       // 全服共享生命与饥饿
             "sharedDamageSplitEnabled",  // 全服平摊伤害
             "randomDamageEnabled"        // 随机转移伤害
         };
@@ -318,28 +388,29 @@ public class ChaosModConfigScreen extends HandledScreen<ChaosModScreenHandler> {
     }
     
     private void toggleAllConfigs(boolean enable) {
-        Map<String, String> currentLabels = getCurrentLabels();
-        for (String key : currentLabels.keySet()) {
-            // 如果是启用操作，检查互斥逻辑
-            if (enable) {
-                // 检查互斥逻辑
-                if (!checkMutualExclusion(key)) {
-                    continue; // 跳过这个效果
-                }
+        Map<String, Boolean> changes = new LinkedHashMap<>();
+        boolean mutexSelected = false;
+        for (String key : getCurrentLabels().keySet()) {
+            boolean value = enable;
+            if (enable && isMutualExclusionKey(key)) {
+                value = !mutexSelected;
+                mutexSelected = true;
             }
-            
-            // 立即更新本地配置
-            ChaosMod.config.set(key, enable);
-            
-            // 在集成服务器中，直接调用服务端方法
-            // 在专用服务器中需要实现 C2S 网络包
-            // ConfigToggleC2SPacket.updateConfig(key, enable, serverPlayer);
+            changes.put(key, value);
         }
+        ClientPlayNetworking.send(new ConfigToggleC2SPacket(changes));
         
         // 更新按钮文本
         updateButtonTexts();
     }
     
+    private boolean isMutualExclusionKey(String key) {
+        return "playerDamageShareEnabled".equals(key)
+            || "sharedHealthEnabled".equals(key)
+            || "sharedDamageSplitEnabled".equals(key)
+            || "randomDamageEnabled".equals(key);
+    }
+
     private void updateButtonTexts() {
         Map<String, String> currentLabels = getCurrentLabels();
         List<Map.Entry<String, String>> entries = new ArrayList<>(currentLabels.entrySet());
@@ -353,6 +424,304 @@ public class ChaosModConfigScreen extends HandledScreen<ChaosModScreenHandler> {
                 ButtonWidget button = this.configButtons.get(buttonIndex);
                 button.setMessage(getButtonText(entry.getKey(), entry.getValue()));
             }
+        }
+        this.intervalSliders.forEach(IntervalSlider::syncFromConfig);
+        this.percentageSliders.forEach(PercentageSlider::syncFromConfig);
+    }
+
+    @Override
+    public boolean mouseClicked(double mouseX, double mouseY, int button) {
+        if (button == 0) {
+            for (IntervalSlider slider : intervalSliders) {
+                if (slider.active && slider.isMouseOver(mouseX, mouseY)) {
+                    draggedIntervalSlider = slider;
+                    draggedPercentageSlider = null;
+                    slider.mouseClicked(mouseX, mouseY, button);
+                    return true;
+                }
+            }
+            for (PercentageSlider slider : percentageSliders) {
+                if (slider.active && slider.isMouseOver(mouseX, mouseY)) {
+                    draggedPercentageSlider = slider;
+                    draggedIntervalSlider = null;
+                    slider.mouseClicked(mouseX, mouseY, button);
+                    return true;
+                }
+            }
+        }
+        return super.mouseClicked(mouseX, mouseY, button);
+    }
+
+    @Override
+    public boolean mouseDragged(double mouseX, double mouseY, int button, double deltaX, double deltaY) {
+        if (button == 0 && draggedIntervalSlider != null) {
+            draggedIntervalSlider.mouseDragged(mouseX, mouseY, button, deltaX, deltaY);
+            return true;
+        }
+        if (button == 0 && draggedPercentageSlider != null) {
+            draggedPercentageSlider.mouseDragged(mouseX, mouseY, button, deltaX, deltaY);
+            return true;
+        }
+        return super.mouseDragged(mouseX, mouseY, button, deltaX, deltaY);
+    }
+
+    @Override
+    public boolean mouseReleased(double mouseX, double mouseY, int button) {
+        if (button == 0 && draggedIntervalSlider != null) {
+            IntervalSlider slider = draggedIntervalSlider;
+            draggedIntervalSlider = null;
+            slider.mouseReleased(mouseX, mouseY, button);
+            return true;
+        }
+        if (button == 0 && draggedPercentageSlider != null) {
+            PercentageSlider slider = draggedPercentageSlider;
+            draggedPercentageSlider = null;
+            slider.mouseReleased(mouseX, mouseY, button);
+            return true;
+        }
+        return super.mouseReleased(mouseX, mouseY, button);
+    }
+
+    @Override
+    public boolean keyPressed(int keyCode, int scanCode, int modifiers) {
+        if (keyCode == GLFW.GLFW_KEY_LEFT || keyCode == GLFW.GLFW_KEY_RIGHT) {
+            int delta = keyCode == GLFW.GLFW_KEY_LEFT ? -1 : 1;
+            for (IntervalSlider slider : intervalSliders) {
+                if (slider.active && slider.isHovered()) {
+                    return slider.adjustBySeconds(delta);
+                }
+            }
+            for (PercentageSlider slider : percentageSliders) {
+                if (slider.active && slider.isHovered()) {
+                    return slider.adjustByPercentage(delta);
+                }
+            }
+        }
+        return super.keyPressed(keyCode, scanCode, modifiers);
+    }
+
+    private final class IntervalSlider extends SliderWidget {
+        private final String intervalKey;
+        private boolean syncing;
+        private boolean mouseAdjusting;
+        private int lastSubmittedSeconds;
+
+        private IntervalSlider(int x, int y, int width, int height, String intervalKey) {
+            super(x, y, width, height, Text.empty(), toSliderValue(ChaosMod.config.getIntervalSeconds(intervalKey)));
+            this.intervalKey = intervalKey;
+            this.lastSubmittedSeconds = ChaosMod.config.getIntervalSeconds(intervalKey);
+            this.active = hasPermission;
+            updateMessage();
+        }
+
+        @Override
+        public void onClick(double mouseX, double mouseY) {
+            mouseAdjusting = true;
+            super.onClick(mouseX, mouseY);
+        }
+
+        @Override
+        protected void onDrag(double mouseX, double mouseY, double deltaX, double deltaY) {
+            mouseAdjusting = true;
+            super.onDrag(mouseX, mouseY, deltaX, deltaY);
+        }
+
+        @Override
+        public void onRelease(double mouseX, double mouseY) {
+            super.onRelease(mouseX, mouseY);
+            if (mouseAdjusting) {
+                mouseAdjusting = false;
+                submitCurrentValue();
+            }
+        }
+
+        @Override
+        protected void updateMessage() {
+            setMessage(Text.literal(LanguageManager.getFormattedUI("gui.interval", currentSeconds())));
+        }
+
+        @Override
+        protected void applyValue() {
+            updateMessage();
+            // 鼠标拖动过程中只更新本地显示，避免每移动一个像素就触发服务端
+            // 全量同步并把滑块拉回。鼠标松开时再统一提交一次。
+            if (!syncing && !mouseAdjusting) {
+                submitCurrentValue();
+            }
+        }
+
+        @Override
+        public boolean keyPressed(int keyCode, int scanCode, int modifiers) {
+            if (keyCode == GLFW.GLFW_KEY_LEFT) {
+                return adjustBySeconds(-1);
+            }
+            if (keyCode == GLFW.GLFW_KEY_RIGHT) {
+                return adjustBySeconds(1);
+            }
+            return super.keyPressed(keyCode, scanCode, modifiers);
+        }
+
+        private boolean adjustBySeconds(int delta) {
+            int current = currentSeconds();
+            int next = com.example.config.ChaosModConfig.clampIntervalSeconds(current + delta);
+            if (next == current) {
+                return true;
+            }
+
+            syncing = true;
+            value = toSliderValue(next);
+            updateMessage();
+            syncing = false;
+            submitCurrentValue();
+            return true;
+        }
+
+        private void submitCurrentValue() {
+            int seconds = currentSeconds();
+            if (!hasPermission || seconds == lastSubmittedSeconds
+                    || !ClientPlayNetworking.canSend(ConfigToggleC2SPacket.ID)) {
+                return;
+            }
+            lastSubmittedSeconds = seconds;
+            ClientPlayNetworking.send(ConfigToggleC2SPacket.interval(intervalKey, seconds));
+        }
+
+        private int currentSeconds() {
+            int range = com.example.config.ChaosModConfig.MAX_INTERVAL_SECONDS
+                - com.example.config.ChaosModConfig.MIN_INTERVAL_SECONDS;
+            return com.example.config.ChaosModConfig.clampIntervalSeconds(
+                com.example.config.ChaosModConfig.MIN_INTERVAL_SECONDS + (int)Math.round(value * range)
+            );
+        }
+
+        private void syncFromConfig() {
+            // 其他配置同步不能打断当前的长按拖动；松手提交后再采用服务端回包。
+            if (mouseAdjusting) {
+                return;
+            }
+            int seconds = ChaosMod.config.getIntervalSeconds(intervalKey);
+            syncing = true;
+            value = toSliderValue(seconds);
+            lastSubmittedSeconds = seconds;
+            updateMessage();
+            syncing = false;
+        }
+
+        private static double toSliderValue(int seconds) {
+            int min = com.example.config.ChaosModConfig.MIN_INTERVAL_SECONDS;
+            int max = com.example.config.ChaosModConfig.MAX_INTERVAL_SECONDS;
+            return (com.example.config.ChaosModConfig.clampIntervalSeconds(seconds) - min) / (double)(max - min);
+        }
+    }
+
+    private final class PercentageSlider extends SliderWidget {
+        private final String percentageKey;
+        private boolean syncing;
+        private boolean mouseAdjusting;
+        private int lastSubmittedPercentage;
+
+        private PercentageSlider(int x, int y, int width, int height, String percentageKey) {
+            super(x, y, width, height, Text.empty(), toSliderValue(ChaosMod.config.getPercentage(percentageKey)));
+            this.percentageKey = percentageKey;
+            this.lastSubmittedPercentage = ChaosMod.config.getPercentage(percentageKey);
+            this.active = hasPermission;
+            updateMessage();
+        }
+
+        @Override
+        public void onClick(double mouseX, double mouseY) {
+            mouseAdjusting = true;
+            super.onClick(mouseX, mouseY);
+        }
+
+        @Override
+        protected void onDrag(double mouseX, double mouseY, double deltaX, double deltaY) {
+            mouseAdjusting = true;
+            super.onDrag(mouseX, mouseY, deltaX, deltaY);
+        }
+
+        @Override
+        public void onRelease(double mouseX, double mouseY) {
+            super.onRelease(mouseX, mouseY);
+            if (mouseAdjusting) {
+                mouseAdjusting = false;
+                submitCurrentValue();
+            }
+        }
+
+        @Override
+        protected void updateMessage() {
+            setMessage(Text.literal(LanguageManager.getFormattedUI("gui.probability", currentPercentage())));
+        }
+
+        @Override
+        protected void applyValue() {
+            updateMessage();
+            if (!syncing && !mouseAdjusting) {
+                submitCurrentValue();
+            }
+        }
+
+        @Override
+        public boolean keyPressed(int keyCode, int scanCode, int modifiers) {
+            if (keyCode == GLFW.GLFW_KEY_LEFT) {
+                return adjustByPercentage(-1);
+            }
+            if (keyCode == GLFW.GLFW_KEY_RIGHT) {
+                return adjustByPercentage(1);
+            }
+            return super.keyPressed(keyCode, scanCode, modifiers);
+        }
+
+        private boolean adjustByPercentage(int delta) {
+            int current = currentPercentage();
+            int next = com.example.config.ChaosModConfig.clampPercentage(current + delta);
+            if (next == current) {
+                return true;
+            }
+
+            syncing = true;
+            value = toSliderValue(next);
+            updateMessage();
+            syncing = false;
+            submitCurrentValue();
+            return true;
+        }
+
+        private void submitCurrentValue() {
+            int percentage = currentPercentage();
+            if (!hasPermission || percentage == lastSubmittedPercentage
+                    || !ClientPlayNetworking.canSend(ConfigToggleC2SPacket.ID)) {
+                return;
+            }
+            lastSubmittedPercentage = percentage;
+            ClientPlayNetworking.send(ConfigToggleC2SPacket.percentage(percentageKey, percentage));
+        }
+
+        private int currentPercentage() {
+            int range = com.example.config.ChaosModConfig.MAX_PERCENTAGE
+                - com.example.config.ChaosModConfig.MIN_PERCENTAGE;
+            return com.example.config.ChaosModConfig.clampPercentage(
+                com.example.config.ChaosModConfig.MIN_PERCENTAGE + (int)Math.round(value * range)
+            );
+        }
+
+        private void syncFromConfig() {
+            if (mouseAdjusting) {
+                return;
+            }
+            int percentage = ChaosMod.config.getPercentage(percentageKey);
+            syncing = true;
+            value = toSliderValue(percentage);
+            lastSubmittedPercentage = percentage;
+            updateMessage();
+            syncing = false;
+        }
+
+        private static double toSliderValue(int percentage) {
+            int min = com.example.config.ChaosModConfig.MIN_PERCENTAGE;
+            int max = com.example.config.ChaosModConfig.MAX_PERCENTAGE;
+            return (com.example.config.ChaosModConfig.clampPercentage(percentage) - min) / (double)(max - min);
         }
     }
     
@@ -430,16 +799,14 @@ public class ChaosModConfigScreen extends HandledScreen<ChaosModScreenHandler> {
         
         AIEffectCombinations.EffectCombination selectedCombo = combinations.get(randomIndex);
         
-        // 先关闭所有效果
-        Map<String, String> currentLabels = getCurrentLabels();
-        for (String key : currentLabels.keySet()) {
-            ChaosMod.config.set(key, false);
+        Map<String, Boolean> changes = new LinkedHashMap<>();
+        for (String key : getCurrentLabels().keySet()) {
+            changes.put(key, false);
         }
-        
-        // 开启选中组合的效果
         for (String effectKey : selectedCombo.effects) {
-            ChaosMod.config.set(effectKey, true);
+            changes.put(effectKey, true);
         }
+        ClientPlayNetworking.send(new ConfigToggleC2SPacket(changes));
         
         // 发送聊天消息
         if (this.client != null && this.client.player != null) {
@@ -490,7 +857,7 @@ public class ChaosModConfigScreen extends HandledScreen<ChaosModScreenHandler> {
                 case "enderDragonBucketEnabled" -> "Dragon turns water→milk";
                 case "enderDragonKillEnabled" -> "Kill dragon = suicide";
                 case "playerDamageShareEnabled" -> "Share damage with nearby players";
-                case "sharedHealthEnabled" -> "One dies = all die";
+                case "sharedHealthEnabled" -> "All players share one health and hunger state";
                 case "sharedDamageSplitEnabled" -> "All damage split server-wide";
                 case "randomDamageEnabled" -> "Damage transfers randomly";
                 case "shieldNerfEnabled" -> "Shield blocks only 80%";
@@ -531,6 +898,11 @@ public class ChaosModConfigScreen extends HandledScreen<ChaosModScreenHandler> {
                 case "multiplayerRouletteEnabled" -> "90s = random lottery punishment";
                 case "timedPositionSwapEnabled" -> "60s = random swap positions";
                 case "forcedSprintEnabled" -> "90s = one must keep moving";
+                case "periodicNegativeEffectEnabled" -> "Every interval, receive one random harmful effect only";
+                case "weaponSlipEnabled" -> "Melee hit a hostile mob = chance to drop held weapon";
+                case "magmaBetrayalEnabled" -> "Random player's solid footing becomes magma for 10s";
+                case "timeReboundEnabled" -> "Return to the recorded position after 5s and lose 2 hearts";
+                case "burdenCollapseEnabled" -> "Inventory load is settled after 5s as damage and Slowness II";
                 default -> "Unknown effect";
             };
         } else {
@@ -544,7 +916,7 @@ public class ChaosModConfigScreen extends HandledScreen<ChaosModScreenHandler> {
                 case "enderDragonBucketEnabled" -> "龙把水桶变牛奶";
                 case "enderDragonKillEnabled" -> "杀龙=自杀";
                 case "playerDamageShareEnabled" -> "与附近玩家分担伤害";
-                case "sharedHealthEnabled" -> "一人死=全员死";
+                case "sharedHealthEnabled" -> "全服玩家共享同一生命、饥饿和饱和度";
                 case "sharedDamageSplitEnabled" -> "全服分担伤害";
                 case "randomDamageEnabled" -> "伤害随机转移";
                 case "shieldNerfEnabled" -> "盾牌只挡80%";
@@ -585,6 +957,11 @@ public class ChaosModConfigScreen extends HandledScreen<ChaosModScreenHandler> {
                 case "multiplayerRouletteEnabled" -> "90秒=随机抽奖惩罚";
                 case "timedPositionSwapEnabled" -> "60秒=随机交换位置";
                 case "forcedSprintEnabled" -> "90秒=一人必须持续移动";
+                case "periodicNegativeEffectEnabled" -> "每隔设定秒数获得一个随机负面效果，不含增益";
+                case "weaponSlipEnabled" -> "近战命中敌对生物时概率丢出主手武器";
+                case "magmaBetrayalEnabled" -> "随机玩家脚下实体方块变成岩浆块10秒";
+                case "timeReboundEnabled" -> "5秒后回到记录位置并固定扣2颗心";
+                case "burdenCollapseEnabled" -> "5秒后按背包占用槽位扣血并获得缓慢II";
                 default -> "未知效果";
             };
         }

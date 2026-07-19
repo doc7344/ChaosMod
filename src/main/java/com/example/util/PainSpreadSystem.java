@@ -47,7 +47,11 @@ public class PainSpreadSystem {
      * tick处理带电玩家 - 按照严格规范实现，确保不劈自己
      */
     public static void tickElectrified(PlayerEntity owner) {
-        if (!ChaosMod.config.painSpreadEnabled) return;
+        if (!ChaosMod.config.painSpreadEnabled) {
+            ELECTRIFIED_PLAYERS.remove(owner);
+            LIGHTNING_COOLDOWNS.remove(owner);
+            return;
+        }
         if (owner.getWorld().isClient()) return;
         if (!(owner instanceof ServerPlayerEntity serverOwner)) return;
 
@@ -89,13 +93,14 @@ public class PainSpreadSystem {
             // 添加到冷却列表
             cooldownSet.add(other);
             
-            // 生成雷击（仅对other施加雷击/伤害）
+            // 仅在目标位置显示无伤害闪电，伤害定向施加给目标，避免范围伤害波及带电者本人。
             LightningEntity lightning = EntityType.LIGHTNING_BOLT.create(world);
             if (lightning != null) {
                 lightning.refreshPositionAfterTeleport(other.getX(), other.getY(), other.getZ());
-                lightning.setCosmetic(false); // 造成真实伤害
+                lightning.setCosmetic(true);
                 world.spawnEntity(lightning);
             }
+            other.damage(world.getDamageSources().lightningBolt(), 5.0F);
             
             // 发送消息
             other.sendMessage(Text.literal("⚡ " + 
@@ -115,5 +120,11 @@ public class PainSpreadSystem {
      */
     public static Set<PlayerEntity> getElectrifiedPlayers() {
         return new HashSet<>(ELECTRIFIED_PLAYERS.keySet());
+    }
+
+    public static void cleanupPlayer(PlayerEntity player) {
+        ELECTRIFIED_PLAYERS.remove(player);
+        LIGHTNING_COOLDOWNS.remove(player);
+        for (Set<PlayerEntity> cooldowns : LIGHTNING_COOLDOWNS.values()) cooldowns.remove(player);
     }
 }

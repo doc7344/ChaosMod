@@ -34,7 +34,15 @@ public class WindowShakeSystem {
      * 按照用户指导：用每帧读数阈值判断生命值 ≤5♥ / ≤2♥
      */
     public static void clientTick() {
-        if (!ChaosMod.config.windowViolentShakeEnabled) return;
+        if (!ChaosMod.config.windowViolentShakeEnabled) {
+            if (isShaking || wasDeadLastTick) {
+                resetWindowPosition();
+            } else {
+                basePositionSet = false;
+            }
+            wasDeadLastTick = false;
+            return;
+        }
         
         MinecraftClient client = MinecraftClient.getInstance();
         if (client == null || client.getWindow() == null) return;
@@ -142,17 +150,20 @@ public class WindowShakeSystem {
      * 重置窗口位置（用于清理）
      */
     public static void resetWindowPosition() {
-        if (!basePositionSet) return;
-        
         MinecraftClient client = MinecraftClient.getInstance();
-        if (client == null || client.getWindow() == null) return;
-        
-        long window = client.getWindow().getHandle();
-        if (window != 0) {
-            GLFW.glfwSetWindowPos(window, baseWindowX, baseWindowY);
+        if (basePositionSet && client != null && client.getWindow() != null) {
+            long window = client.getWindow().getHandle();
+            if (window != 0) {
+                GLFW.glfwSetWindowPos(window, baseWindowX, baseWindowY);
+            }
         }
         
         isShaking = false;
+        shakeStartTime = 0;
+        shakeDuration = 0;
+        shakeAmplitude = 0.0f;
+        wasDeadLastTick = false;
+        basePositionSet = false;
         // 简化完毕：只保留基本的窗口重置功能
     }
 }

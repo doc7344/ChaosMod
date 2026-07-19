@@ -20,6 +20,7 @@ public abstract class PlayerManagerRespawnMixin {
         
         // 原有逻辑：混沌效果重置
         ChaosEffects.resetOnRespawn(respawnedPlayer);
+        com.example.util.SharedVitalitySystem.onPlayerRespawn(respawnedPlayer);
         
         // === v1.6.0 新增：第四面墙复活惩戒 ===
         // 检查是否为死亡复活（而非换维刷新）

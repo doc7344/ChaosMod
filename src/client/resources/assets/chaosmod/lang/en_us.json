@@ -15,6 +15,8 @@
   "chaosmod.gui.admin_required": "Admin Rights Required",
   "chaosmod.gui.back": "Back",
   "chaosmod.gui.language": "🌐 Language",
+  "chaosmod.gui.interval": "Interval: %ds",
+  "chaosmod.gui.probability": "Chance: %d%%",
   
   "chaosmod.config.allHostileEnabled": "All Mobs Hostile",
   "chaosmod.config.mobIgniteEnabled": "Mob Hits Ignite",
@@ -25,7 +27,7 @@
   "chaosmod.config.enderDragonBucketEnabled": "Dragon Hit → Water to Milk",
   "chaosmod.config.enderDragonKillEnabled": "Dragon Killer Suicide",
   "chaosmod.config.playerDamageShareEnabled": "Close Range Damage Share",
-  "chaosmod.config.sharedHealthEnabled": "Shared Health (Mirror)",
+  "chaosmod.config.sharedHealthEnabled": "Shared Health & Hunger",
   "chaosmod.config.sharedDamageSplitEnabled": "Server-wide Damage Split",
   "chaosmod.config.randomDamageEnabled": "Random Damage Transfer",
   "chaosmod.config.shieldNerfEnabled": "Shield Only Absorbs 80%",
@@ -69,6 +71,11 @@
   "chaosmod.config.multiplayerRouletteEnabled": "Multiplayer Roulette",
   "chaosmod.config.timedPositionSwapEnabled": "Timed Position Swap",
   "chaosmod.config.forcedSprintEnabled": "Forced Sprint",
+  "chaosmod.config.periodicNegativeEffectEnabled": "Periodic Negative Effect",
+  "chaosmod.config.weaponSlipEnabled": "Weapon Slip",
+  "chaosmod.config.magmaBetrayalEnabled": "Magma Betrayal",
+  "chaosmod.config.timeReboundEnabled": "Time Rebound",
+  "chaosmod.config.burdenCollapseEnabled": "Burden Collapse",
   
   "chaosmod.effect.forced_tether_start": "You are forcibly tethered to %s! Stay within 15 blocks or both take damage!",
   "chaosmod.effect.forced_tether_too_far": "Too far! Taking damage!",
@@ -153,7 +160,7 @@
   "chaosmod.tooltip.enderDragonBucketEnabled": "Dragon turns water→milk",
   "chaosmod.tooltip.enderDragonKillEnabled": "Kill dragon = suicide",
   "chaosmod.tooltip.playerDamageShareEnabled": "Share damage with nearby players",
-  "chaosmod.tooltip.sharedHealthEnabled": "One dies = all die",
+  "chaosmod.tooltip.sharedHealthEnabled": "All players share one health, hunger, and saturation state",
   "chaosmod.tooltip.sharedDamageSplitEnabled": "All damage split server-wide",
   "chaosmod.tooltip.randomDamageEnabled": "Damage transfers randomly",
   "chaosmod.tooltip.shieldNerfEnabled": "Shield blocks only 80%",
@@ -194,6 +201,14 @@
   "chaosmod.tooltip.multiplayerRouletteEnabled": "90s = random lottery punishment",
   "chaosmod.tooltip.timedPositionSwapEnabled": "60s = random swap positions",
   "chaosmod.tooltip.forcedSprintEnabled": "90s = one must keep moving",
+  "chaosmod.tooltip.periodicNegativeEffectEnabled": "Every interval, receive one random harmful effect only",
+  "chaosmod.tooltip.weaponSlipEnabled": "Melee hit a hostile mob = chance to drop held weapon",
+  "chaosmod.tooltip.magmaBetrayalEnabled": "Random player's solid footing becomes magma for 10s",
+  "chaosmod.tooltip.timeReboundEnabled": "Return to the recorded position after 5s and lose 2 hearts",
+  "chaosmod.tooltip.burdenCollapseEnabled": "Inventory load is settled after 5s as damage and Slowness II",
   
-  "chaosmod.electric_poison_damage": "Electric Poison Seizure: enjoy the shock treatment!"
+  "chaosmod.electric_poison_damage": "Electric Poison Seizure: enjoy the shock treatment!",
+  "chaosmod.effect.periodic_negative_effect": "Periodic negative effect: %s",
+  "chaosmod.effect.burden_collapse_warning": "Your load is crushing you... settlement in 5 seconds",
+  "chaosmod.effect.burden_collapse_result": "Load settlement: %d occupied slots, took %.1f hearts of damage"
 }

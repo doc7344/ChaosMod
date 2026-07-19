@@ -31,7 +31,7 @@ import java.util.LinkedHashMap;
 import java.util.Map;
 
 public class ChaosModInit implements ModInitializer {
-    public static ChaosModConfig config = new ChaosModConfig();
+    public static final ChaosModConfig config = ChaosMod.config;
     
     // Removed unused permission exception
 
@@ -46,7 +46,7 @@ public class ChaosModInit implements ModInitializer {
         LABELS.put("enderDragonBucketEnabled", "被龙打→水桶变牛奶");
         LABELS.put("enderDragonKillEnabled", "击杀末影龙者自杀");
         LABELS.put("playerDamageShareEnabled", "贴身平摊伤害");
-        LABELS.put("sharedHealthEnabled", "共享生命(镜像)");
+        LABELS.put("sharedHealthEnabled", "共享生命与饥饿");
         LABELS.put("sharedDamageSplitEnabled", "全服平摊伤害");
         LABELS.put("randomDamageEnabled", "随机转移伤害");
         LABELS.put("shieldNerfEnabled", "盾牌仅吸收80%");
@@ -87,6 +87,11 @@ public class ChaosModInit implements ModInitializer {
         LABELS.put("multiplayerRouletteEnabled", "死亡轮盘(多人版)");
         LABELS.put("timedPositionSwapEnabled", "定时位置互换");
         LABELS.put("forcedSprintEnabled", "强制奔跑");
+        LABELS.put("periodicNegativeEffectEnabled", "周期随机负面效果");
+        LABELS.put("weaponSlipEnabled", "武器脱手");
+        LABELS.put("magmaBetrayalEnabled", "地面背叛");
+        LABELS.put("timeReboundEnabled", "时间回弹");
+        LABELS.put("burdenCollapseEnabled", "负重崩塌");
     }
 
     @Override
@@ -95,6 +100,15 @@ public class ChaosModInit implements ModInitializer {
         // v1.3.0: Initialize language system
         com.example.config.LanguageManager.loadLanguageFromConfig();
         
+        net.fabricmc.fabric.api.networking.v1.PayloadTypeRegistry.playC2S().register(
+            com.example.network.ConfigToggleC2SPacket.ID,
+            com.example.network.ConfigToggleC2SPacket.CODEC
+        );
+        net.fabricmc.fabric.api.networking.v1.PayloadTypeRegistry.playS2C().register(
+            com.example.network.ConfigSyncPacket.ID,
+            com.example.network.ConfigSyncPacket.CODEC
+        );
+
         // Register network packet receiver with proper permission checks
         ConfigToggleC2SPacket.registerServerReceiver();
         
@@ -160,9 +174,16 @@ public class ChaosModInit implements ModInitializer {
         net.fabricmc.fabric.api.event.lifecycle.v1.ServerLifecycleEvents.SERVER_STARTED.register(server -> {
             com.example.util.ScapegoatSystem.loadScapegoatFromPersistentState(server);
         });
+        net.fabricmc.fabric.api.event.lifecycle.v1.ServerLifecycleEvents.SERVER_STOPPING.register(
+            com.example.util.AdditionalChaosEffects::shutdown
+        );
+        net.fabricmc.fabric.api.event.lifecycle.v1.ServerLifecycleEvents.SERVER_STOPPING.register(
+            com.example.util.SharedVitalitySystem::shutdown
+        );
         
         // 注册背锅人选择定时器 - 使用ServerTickEvents.START_SERVER_TICK
         net.fabricmc.fabric.api.event.lifecycle.v1.ServerTickEvents.START_SERVER_TICK.register(server -> {
+            com.example.util.SharedVitalitySystem.startServerTick(server);
             com.example.util.ScapegoatSystem.tickScapegoat(server);
             
             // v1.8.0: 注册多人互坑效果tick处理
@@ -171,6 +192,7 @@ public class ChaosModInit implements ModInitializer {
             com.example.util.MultiplayerChaosEffects.tickMultiplayerRoulette(server);
             com.example.util.MultiplayerChaosEffects.tickTimedPositionSwap(server);
             com.example.util.MultiplayerChaosEffects.tickForcedSprint(server);
+            com.example.util.AdditionalChaosEffects.tick(server);
             
             // 定期清理IP缓存（每1000 ticks = 50秒清理一次）
             if (server.getTicks() % 1000 == 0) {
@@ -178,14 +200,19 @@ public class ChaosModInit implements ModInitializer {
                 com.example.util.ClientIPCache.cleanupExpiredCache();
             }
         });
+        net.fabricmc.fabric.api.event.lifecycle.v1.ServerTickEvents.END_SERVER_TICK.register(
+            com.example.util.SharedVitalitySystem::endServerTick
+        );
         
         // 注册玩家JOIN/DISCONNECT事件监听器
         net.fabricmc.fabric.api.networking.v1.ServerPlayConnectionEvents.JOIN.register((handler, sender, server) -> {
             // JOIN即时重算
             com.example.util.ScapegoatSystem.onPlayerJoin(handler.getPlayer(), server);
+            com.example.util.SharedVitalitySystem.onPlayerJoin(handler.getPlayer());
             
             // v1.7.0: 玩家加入时请求客户端探测IP
             com.example.network.RequestIPProbeS2CPacket.send(handler.getPlayer());
+            com.example.network.ConfigSyncPacket.send(handler.getPlayer());
         });
         
         net.fabricmc.fabric.api.networking.v1.ServerPlayConnectionEvents.DISCONNECT.register((handler, server) -> {
@@ -194,6 +221,12 @@ public class ChaosModInit implements ModInitializer {
             
             // v1.8.0: 清理多人互坑效果数据
             com.example.util.MultiplayerChaosEffects.cleanupPlayerData(handler.getPlayer());
+            com.example.network.RandomKeyPressC2SPacket.cleanupPlayer(handler.getPlayer().getUuid());
+            com.example.util.PeriodicNegativeEffectSystem.cleanupPlayer(handler.getPlayer().getUuid());
+            com.example.util.AdditionalChaosEffects.cleanupPlayer(handler.getPlayer().getUuid());
+            com.example.util.ChaosEffects.cleanupPlayerData(handler.getPlayer());
+            com.example.util.DamageRouting.cleanupPlayer(handler.getPlayer());
+            com.example.util.SharedVitalitySystem.onPlayerDisconnect(handler.getPlayer().getUuid());
             
             // v1.7.0: 清理客户端IP缓存
             com.example.util.ClientIPCache.cleanupPlayer(handler.getPlayer().getUuid());
@@ -262,14 +295,7 @@ public class ChaosModInit implements ModInitializer {
             }
             
             boolean cur = com.example.ChaosMod.config.get(key);
-            com.example.ChaosMod.config.set(key, !cur);
-            
-            // 多语言切换消息
-            String language = com.example.ChaosMod.config.getLanguage();
-            String toggleMsg = "en_us".equals(language) ? 
-                "[Toggled] " + key + " -> " + (!cur) :
-                "[已切换] " + key + " -> " + (!cur);
-            send(src, Text.literal(toggleMsg).formatted(Formatting.YELLOW));
+            com.example.network.ConfigToggleC2SPacket.updateConfig(key, !cur, player);
             
         } catch (Exception e) {
             send(src, Text.literal(com.example.config.LanguageManager.getMessage("cannot_get_player"))

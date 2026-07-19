@@ -42,7 +42,7 @@ public class LanguageManager {
         CHINESE_LABELS.put("enderDragonBucketEnabled", "被龙打→水桶变牛奶");
         CHINESE_LABELS.put("enderDragonKillEnabled", "击杀末影龙者自杀");
         CHINESE_LABELS.put("playerDamageShareEnabled", "贴身平摊伤害");
-        CHINESE_LABELS.put("sharedHealthEnabled", "共享生命(镜像)");
+        CHINESE_LABELS.put("sharedHealthEnabled", "共享生命与饥饿");
         CHINESE_LABELS.put("sharedDamageSplitEnabled", "全服平摊伤害");
         CHINESE_LABELS.put("randomDamageEnabled", "随机转移伤害");
         CHINESE_LABELS.put("shieldNerfEnabled", "盾牌仅吸收80%");
@@ -91,6 +91,11 @@ public class LanguageManager {
         CHINESE_LABELS.put("multiplayerRouletteEnabled", "死亡轮盘(多人版)");
         CHINESE_LABELS.put("timedPositionSwapEnabled", "定时位置互换");
         CHINESE_LABELS.put("forcedSprintEnabled", "强制奔跑");
+        CHINESE_LABELS.put("periodicNegativeEffectEnabled", "周期随机负面效果");
+        CHINESE_LABELS.put("weaponSlipEnabled", "武器脱手");
+        CHINESE_LABELS.put("magmaBetrayalEnabled", "地面背叛");
+        CHINESE_LABELS.put("timeReboundEnabled", "时间回弹");
+        CHINESE_LABELS.put("burdenCollapseEnabled", "负重崩塌");
     }
     
     // 英文标签
@@ -105,7 +110,7 @@ public class LanguageManager {
         ENGLISH_LABELS.put("enderDragonBucketEnabled", "Dragon Hit → Water to Milk");
         ENGLISH_LABELS.put("enderDragonKillEnabled", "Dragon Killer Suicide");
         ENGLISH_LABELS.put("playerDamageShareEnabled", "Close Range Damage Share");
-        ENGLISH_LABELS.put("sharedHealthEnabled", "Shared Health (Mirror)");
+        ENGLISH_LABELS.put("sharedHealthEnabled", "Shared Health & Hunger");
         ENGLISH_LABELS.put("sharedDamageSplitEnabled", "Server-wide Damage Split");
         ENGLISH_LABELS.put("randomDamageEnabled", "Random Damage Transfer");
         ENGLISH_LABELS.put("shieldNerfEnabled", "Shield Only Absorbs 80%");
@@ -154,6 +159,11 @@ public class LanguageManager {
         ENGLISH_LABELS.put("multiplayerRouletteEnabled", "Multiplayer Roulette");
         ENGLISH_LABELS.put("timedPositionSwapEnabled", "Timed Position Swap");
         ENGLISH_LABELS.put("forcedSprintEnabled", "Forced Sprint");
+        ENGLISH_LABELS.put("periodicNegativeEffectEnabled", "Periodic Negative Effect");
+        ENGLISH_LABELS.put("weaponSlipEnabled", "Weapon Slip");
+        ENGLISH_LABELS.put("magmaBetrayalEnabled", "Magma Betrayal");
+        ENGLISH_LABELS.put("timeReboundEnabled", "Time Rebound");
+        ENGLISH_LABELS.put("burdenCollapseEnabled", "Burden Collapse");
     }
     
     // UI 文本
@@ -172,6 +182,8 @@ public class LanguageManager {
         CHINESE_UI.put("gui.admin_required", "需要管理员权限");
         CHINESE_UI.put("gui.back", "返回");
         CHINESE_UI.put("gui.language", "🌐 Language");
+        CHINESE_UI.put("gui.interval", "触发间隔: %d秒");
+        CHINESE_UI.put("gui.probability", "触发概率: %d%%");
         CHINESE_UI.put("permission.denied", "🚫 权限不足！只有管理员才能修改 ChaosMod 配置！");
         CHINESE_UI.put("config.updated", "[配置已更新] %s -> %s");
         CHINESE_UI.put("ai.random.button", "[AI] 随机效果(为你量身定做)");
@@ -194,6 +206,8 @@ public class LanguageManager {
         ENGLISH_UI.put("gui.admin_required", "Admin Rights Required");
         ENGLISH_UI.put("gui.back", "Back");
         ENGLISH_UI.put("gui.language", "🌐 语言");
+        ENGLISH_UI.put("gui.interval", "Interval: %ds");
+        ENGLISH_UI.put("gui.probability", "Chance: %d%%");
         ENGLISH_UI.put("permission.denied", "🚫 Permission denied! Only admins can modify ChaosMod config!");
         ENGLISH_UI.put("config.updated", "[Config Updated] %s -> %s");
         ENGLISH_UI.put("ai.random.button", "[AI] Random Effects (Tailored for You)");
@@ -394,6 +408,9 @@ public class LanguageManager {
                 case "pulled_by_magnet" -> "You were pulled by a magnetized teammate! Gained brief magnetization immunity.";
                 case "greed_penalty" -> "The price of greed! Picking up items costs you life!";
                 case "damage_absorbed" -> "You absorbed damage for someone else!";
+                case "periodic_negative_effect" -> "Periodic negative effect: %s";
+                case "burden_collapse_warning" -> "Your load is crushing you... settlement in 5 seconds";
+                case "burden_collapse_result" -> "Load settlement: %d occupied slots, took %.1f hearts of damage";
                 // v1.7.0 Electric Hell-Grade Effects Messages
                 case "touch_hell_activated" -> "Touch Hell activated! Teleported to lava pool!";
                 case "movement_tax_damage" -> "Movement Tax: -0.5 hearts";
@@ -464,6 +481,9 @@ public class LanguageManager {
                 case "pulled_by_magnet" -> "你被磁化的队友拉了过去！获得短暂磁化免疫。";
                 case "greed_penalty" -> "贪心的代价！拾取物品让你失去了生命！";
                 case "damage_absorbed" -> "你替别人承受了伤害！";
+                case "periodic_negative_effect" -> "你获得了周期负面效果：%s";
+                case "burden_collapse_warning" -> "负重正在压垮你……5秒后结算";
+                case "burden_collapse_result" -> "负重结算：%d个槽位，受到%.1f颗心伤害";
                 // v1.7.0 电击地狱级效果消息
                 case "touch_hell_activated" -> "触控地狱激活！传送到岩浆池！";
                 case "movement_tax_damage" -> "移动税：-0.5心";

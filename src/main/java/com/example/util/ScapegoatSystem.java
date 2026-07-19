@@ -34,7 +34,9 @@ public class ScapegoatSystem {
     // 全局缓存
     private static ServerPlayerEntity currentScapegoat = null;
     private static long lastScapegoatTime = 0;
-    private static final long SCAPEGOAT_INTERVAL = 5 * 60 * 20; // 5分钟 = 6000 ticks
+    private static long scapegoatIntervalTicks() {
+        return ChaosMod.config.damageScapegoatIntervalSeconds * 20L;
+    }
     
     /**
      * PersistentState用于持久化背锅人UUID - 按照正确API实现
@@ -169,6 +171,11 @@ public class ScapegoatSystem {
             // 任何修改后立刻markDirty()
             markDirty();
         }
+
+        public void setNextRollTick(long nextRollTick) {
+            this.nextRollTick = nextRollTick;
+            markDirty();
+        }
         
         public void clearVisited() {
             this.visited.clear();
@@ -208,11 +215,16 @@ public class ScapegoatSystem {
      * 服务端tick处理背锅人选择 - 按照新规范实现
      */
     public static void tickScapegoat(MinecraftServer server) {
-        if (!ChaosMod.config.damageScapegoatEnabled) return;
+        if (!ChaosMod.config.damageScapegoatEnabled) {
+            currentScapegoat = null;
+            return;
+        }
         
         ServerWorld overworld = server.getOverworld();
         long currentTick = overworld.getTime();
         ScapegoatPersistentState state = ScapegoatPersistentState.get(overworld);
+        restoreOnlineScapegoat(server, state);
+        if (getEligiblePlayerCount(server.getPlayerManager().getPlayerList()) < 2) return;
         
         // 背锅人不可用即"即时重选"：在定时器处调用ensureScapegoat()
         ensureScapegoat(server, state, currentTick);
@@ -233,6 +245,7 @@ public class ScapegoatSystem {
         if (state != ScapegoatPersistentState.get(overworld)) {
             state = ScapegoatPersistentState.get(overworld); // 确保使用同一实例
         }
+        if (getEligiblePlayerCount(server.getPlayerManager().getPlayerList()) < 2) return;
         
         boolean needReselect = false;
         String reason = "";
@@ -257,6 +270,12 @@ public class ScapegoatSystem {
                 // 死亡期间不重选，只是暂停转移
                 // 这里不设置needReselect = true，保持背锅人不变
                 reason = "背锅人死亡中";
+            } else if (!isEligiblePlayer(foundPlayer)) {
+                needReselect = true;
+                reason = "背锅人已不再是有效候选者";
+            } else {
+                // 复活或换维度后实体对象可能变化，始终绑定实时实体。
+                currentScapegoat = foundPlayer;
             }
         }
         
@@ -295,14 +314,15 @@ public class ScapegoatSystem {
                 !lastScapegoat.equals(Util.NIL_UUID) && 
                 player.getUuid().equals(lastScapegoat));
             
-            if (connected && !inVisited && !isLastScapegoat) {
+            if (connected && isEligiblePlayer(player)
+                    && !inVisited && !isLastScapegoat) {
                 candidates.add(player);
             }
         }
         
         
         // visited兜底：当candidates为空且在线≥2时先visited.clear()再重算，并仍排除last
-        if (candidates.isEmpty() && getConnectedPlayerCount(players) >= 2) {
+        if (candidates.isEmpty() && getEligiblePlayerCount(players) >= 2) {
             state.clearVisited(); // visited.clear()
             visited = state.getVisited(); // 重新获取空的visited
             
@@ -312,7 +332,7 @@ public class ScapegoatSystem {
                 ServerPlayerEntity foundPlayer = server.getPlayerManager().getPlayer(player.getUuid());
                 boolean connected = (foundPlayer != null);
                 
-                if (connected) {
+                if (connected && isEligiblePlayer(player)) {
                     // NIL_UUID规范化：仅当last≠NIL时才排除
                     boolean canAdd = (lastScapegoat == null || 
                                       lastScapegoat.equals(Util.NIL_UUID) || 
@@ -329,8 +349,8 @@ public class ScapegoatSystem {
             // 从candidates随机抽取设为新的背锅人
             currentScapegoat = candidates.get(ThreadLocalRandom.current().nextInt(candidates.size()));
             
-            // tick门槛固定值：nextRollTick只在"成功抽签"时设为now+6000
-            long nextRoll = currentTick + 6000; // 5分钟后
+            // 成功抽签后的主间隔由服务端配置控制。
+            long nextRoll = currentTick + scapegoatIntervalTicks();
             state.setNewScapegoat(currentScapegoat.getUuid(), nextRoll);
             
             // 只保留模糊警告，不告诉背锅人自己被选中
@@ -376,22 +396,17 @@ public class ScapegoatSystem {
         
         // 修复：把"在线"仅判定为PlayerManager#getPlayer(uuid)!=null
         ServerPlayerEntity foundScapegoat = victim.getServer().getPlayerManager().getPlayer(currentScapegoat.getUuid());
-        if (foundScapegoat == null) {
+        if (foundScapegoat == null || !isEligiblePlayer(foundScapegoat)) {
             return false; // 真正离线，不转移（等待tick重选）
         }
         
         // 获取PersistentState检查死亡状态
-        ServerWorld overworld = victimPlayer.getServerWorld();
+        ServerWorld overworld = victimPlayer.getServer().getOverworld();
         ScapegoatPersistentState state = ScapegoatPersistentState.get(overworld);
         
         // 若背锅人处于deadUntilRespawn则不改向（放行原伤害）
         if (state.isPlayerDeadUntilRespawn(currentScapegoat.getUuid())) {
             return false; // 死亡期间不转移伤害，放行原伤害
-        }
-        
-        // 必须在同维度
-        if (currentScapegoat.getWorld() != victim.getWorld()) {
-            return false; // 跨维度不重定向
         }
         
         // 背锅人自己受伤时不重定向（避免循环）
@@ -416,6 +431,8 @@ public class ScapegoatSystem {
             }
             
             // 转发为同源伤害到背锅人
+            // 以PlayerManager中的实时实体为准，支持复活和跨维度转移
+            currentScapegoat = foundScapegoat;
             currentScapegoat.damage(source, amount);
             
             // 如果是火焰伤害或原受害者着火，同步燃烧效果到背锅人
@@ -498,20 +515,31 @@ public class ScapegoatSystem {
         // 持久化到PersistentState（使用新的visited机制）
         ServerWorld overworld = server.getOverworld();
         ScapegoatPersistentState state = ScapegoatPersistentState.get(overworld);
-        long nextRoll = overworld.getTime() + 6000; // 5分钟后下次选择
+        long nextRoll = overworld.getTime() + scapegoatIntervalTicks();
         state.setNewScapegoat(player.getUuid(), nextRoll);
         
         // 只发送模糊警告，不告诉背锅人身份
         broadcastScapegoatWarning(server);
+    }
+
+    public static void onIntervalChanged(MinecraftServer server) {
+        if (server == null || !ChaosMod.config.damageScapegoatEnabled) return;
+        ServerWorld overworld = server.getOverworld();
+        ScapegoatPersistentState.get(overworld).setNextRollTick(
+            overworld.getTime() + scapegoatIntervalTicks()
+        );
     }
     
     /**
      * 从PersistentState恢复背锅人
      */
     public static void loadScapegoatFromPersistentState(MinecraftServer server) {
+        // 静态字段会跨集成服务器世界存活，先丢弃上一服务器实例的实体引用。
+        currentScapegoat = null;
         // 状态机单一真源：统一只从"主世界PersistentState"读取
         ServerWorld overworld = server.getOverworld();
         ScapegoatPersistentState state = ScapegoatPersistentState.get(overworld);
+        restoreOnlineScapegoat(server, state);
         
         // tick门槛固定值：nextRollTick只在状态首次创建时设定，严禁重复初始化
         if (state.getNextRollTick() == 0) {
@@ -530,10 +558,12 @@ public class ScapegoatSystem {
     public static void onPlayerJoin(ServerPlayerEntity player, MinecraftServer server) {
         if (!ChaosMod.config.damageScapegoatEnabled) return;
         
-        // 如果当前没有背锅人，立即触发选择
-        if (currentScapegoat == null) {
-            ServerWorld overworld = server.getOverworld();
-            ScapegoatPersistentState state = ScapegoatPersistentState.get(overworld);
+        ServerWorld overworld = server.getOverworld();
+        ScapegoatPersistentState state = ScapegoatPersistentState.get(overworld);
+        restoreOnlineScapegoat(server, state);
+        int onlineCount = getEligiblePlayerCount(server.getPlayerManager().getPlayerList());
+        // 单人世界不抽签；第二名及后续玩家加入时立即重算，避免首位玩家永久承担
+        if (onlineCount >= 2 && (currentScapegoat == null || currentScapegoat != player)) {
             selectNewScapegoatWithVisited(server, state, overworld.getTime());
         }
     }
@@ -550,22 +580,37 @@ public class ScapegoatSystem {
             ServerWorld overworld = server.getOverworld();
             ScapegoatPersistentState state = ScapegoatPersistentState.get(overworld);
             state.clearCurrentScapegoat(); // 立即置回NIL_UUID
-            selectNewScapegoatWithVisited(server, state, overworld.getTime());
+            // DISCONNECT回调阶段离线玩家可能仍在PlayerManager列表中，交给下一次server tick重选。
+            state.setNewScapegoat(Util.NIL_UUID, overworld.getTime());
         }
     }
     
     /**
      * 获取连接存活的玩家数量
      */
-    private static int getConnectedPlayerCount(List<ServerPlayerEntity> players) {
+    private static int getEligiblePlayerCount(List<ServerPlayerEntity> players) {
         int count = 0;
         for (ServerPlayerEntity player : players) {
-            // 修复：把"在线"仅判定为PlayerManager能找到该玩家
-            if (player.getServer().getPlayerManager().getPlayer(player.getUuid()) != null) {
+            if (player.getServer().getPlayerManager().getPlayer(player.getUuid()) != null
+                    && isEligiblePlayer(player)) {
                 count++;
             }
         }
         return count;
+    }
+
+    private static boolean isEligiblePlayer(ServerPlayerEntity player) {
+        return player != null
+            && player.isAlive()
+            && !player.isCreative()
+            && !player.isSpectator()
+            && !player.isDisconnected();
+    }
+
+    /** 从持久化UUID恢复当前在线实体，避免重启后丢失背锅人状态。 */
+    private static void restoreOnlineScapegoat(MinecraftServer server, ScapegoatPersistentState state) {
+        UUID saved = state.getLastScapegoat();
+        currentScapegoat = saved == null ? null : server.getPlayerManager().getPlayer(saved);
     }
     
     /**

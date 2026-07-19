@@ -107,18 +107,6 @@ public final class ChaosEffects {
         StatusEffects.TRIAL_OMEN       // 试炼之兆
     );
 
-    // === 伤害背锅人系统 ===
-    private static ServerPlayerEntity currentScapegoat = null;
-    private static long lastScapegoatTime = 0;
-    private static final long SCAPEGOAT_INTERVAL = 5 * 60 * 20; // 5分钟 = 6000 ticks
-
-    // === 痛觉扩散系统 ===
-    private static final Map<PlayerEntity, Long> ELECTRIFIED_PLAYERS = new WeakHashMap<>(); 
-    private static final Map<PlayerEntity, Set<PlayerEntity>> LIGHTNING_COOLDOWNS = new WeakHashMap<>();
-    private static final int ELECTRIFIED_DURATION = 100; // 5秒 = 100 ticks
-    private static final double SPREAD_RADIUS = 3.5; // 扩散半径
-    private static final int LIGHTNING_COOLDOWN = 20; // 1秒防重复
-
     // === 惊惧磁铁系统 ===
     private static final Map<PlayerEntity, Long> PANIC_MAGNETIZED_PLAYERS = new WeakHashMap<>();
     private static final Map<PlayerEntity, Long> PANIC_MAGNET_IMMUNITY = new WeakHashMap<>(); // 磁化免疫
@@ -128,10 +116,12 @@ public final class ChaosEffects {
     private static final ThreadLocal<Boolean> PANIC_MAGNET_REENTRY = ThreadLocal.withInitial(() -> false); // 递归抑制
 
     // === 眩晕背锅侠系统 ===
-    private static ServerPlayerEntity vertigoScapegoat = null;
+    private static UUID vertigoScapegoatUuid = null;
     private static long nextVertigoRollTick = 0;
-    private static final Set<ServerPlayerEntity> visitedScapegoats = new HashSet<>();
-    private static final long VERTIGO_SCAPEGOAT_INTERVAL = 6000; // 5分钟 = 6000 ticks
+    private static final Set<UUID> visitedScapegoats = new HashSet<>();
+    private static long vertigoScapegoatIntervalTicks() {
+        return ChaosMod.config.vertigoScapegoatIntervalSeconds * 20L;
+    }
 
     /**
      * 延迟受伤：拦截LivingEntity#damage并将伤害入队
@@ -140,6 +130,7 @@ public final class ChaosEffects {
         if (!ChaosMod.config.delayedDamageEnabled) return false;
         if (DELAYED_DAMAGE_REENTRY.get()) return false; // 防止递归
         if (entity.getWorld().isClient()) return false;
+        if (!(entity instanceof ServerPlayerEntity)) return false;
 
         // 计算延迟时间：0-5秒 = 0-100 ticks
         long currentTick = entity.getWorld().getTime();
@@ -162,7 +153,10 @@ public final class ChaosEffects {
      * 延迟受伤：在实体tick时处理延迟伤害队列
      */
     public static void tickDelayedDamage(LivingEntity entity) {
-        if (!ChaosMod.config.delayedDamageEnabled) return;
+        if (!ChaosMod.config.delayedDamageEnabled) {
+            DELAYED_DAMAGE_QUEUES.remove(entity);
+            return;
+        }
         if (entity.getWorld().isClient()) return;
 
         Queue<DelayedDamage> queue = DELAYED_DAMAGE_QUEUES.get(entity);
@@ -227,7 +221,7 @@ public final class ChaosEffects {
             disabledKeysSet.add(keyToDisable);
 
             // 发送网络包到客户端
-            KeyDisableS2CPacket.send(serverPlayer, new HashSet<>(disabledKeysSet));
+            syncCombinedDisabledKeys(serverPlayer);
 
             // 通知玩家
             String keyName = getKeyDisplayName(keyToDisable);
@@ -258,23 +252,7 @@ public final class ChaosEffects {
             DAMAGE_COUNTS.remove(player);
             DISABLED_KEYS.remove(player);
             
-            // 检查是否有控制癫痫Plus活跃
-            boolean hasControlSeizure = CONTROL_SEIZURE_END_TIME.containsKey(player);
-            
-            if (hasControlSeizure) {
-                // 如果有控制癫痫Plus，只发送该效果的禁用键
-                String disabledKey = CONTROL_SEIZURE_DISABLED_KEY.get(player);
-                if (disabledKey != null) {
-                    Set<String> onlySeizureKey = new HashSet<>();
-                    onlySeizureKey.add(disabledKey);
-                    KeyDisableS2CPacket.send(player, onlySeizureKey);
-                } else {
-                    KeyDisableS2CPacket.send(player, new HashSet<>());
-                }
-            } else {
-                // 没有控制癫痫Plus，完全重置
-                KeyDisableS2CPacket.send(player, new HashSet<>());
-            }
+            syncCombinedDisabledKeys(player);
                 
         } catch (Exception e) {
             // 静默处理错误
@@ -300,20 +278,8 @@ public final class ChaosEffects {
      * 同步按键禁用状态给客户端
      */
     public static void syncKeyDisableState(ServerPlayerEntity player) {
-        if (!ChaosMod.config.keyDisableEnabled) {
-            // 如果功能被禁用，确保客户端没有按键被禁用
-            KeyDisableS2CPacket.send(player, new HashSet<>());
-            return;
-        }
-        
-        // 同步当前的禁用状态
-        Set<String> disabled = DISABLED_KEYS.get(player);
-        if (disabled == null) {
-            disabled = new HashSet<>();
-        }
-        
         try {
-            KeyDisableS2CPacket.send(player, new HashSet<>(disabled));
+            syncCombinedDisabledKeys(player);
         } catch (Exception e) {
             // 静默处理错误
         }
@@ -342,7 +308,10 @@ public final class ChaosEffects {
      * 受伤随机增益：随机添加或移除状态效果
      */
     public static void handleRandomEffects(LivingEntity entity) {
-        if (!ChaosMod.config.randomEffectsEnabled) return;
+        if (!ChaosMod.config.randomEffectsEnabled) {
+            if (entity instanceof PlayerEntity player) LAST_EFFECT_TIME.remove(player);
+            return;
+        }
         if (entity.getWorld().isClient()) return;
         if (!(entity instanceof PlayerEntity player)) return;
 
@@ -445,164 +414,35 @@ public final class ChaosEffects {
      * 伤害背锅人：服务器tick时更新背锅人
      */
     public static void tickScapegoat(MinecraftServer server) {
-        if (!ChaosMod.config.damageScapegoatEnabled) return;
-
-        long currentTime = server.getOverworld().getTime();
-        
-        // 检查是否需要选择新的背锅人
-        if (currentTime - lastScapegoatTime >= SCAPEGOAT_INTERVAL) {
-            selectNewScapegoat(server);
-            lastScapegoatTime = currentTime;
-        }
-
-        // 检查当前背锅人是否仍然在线
-        if (currentScapegoat != null && (currentScapegoat.isDisconnected() || currentScapegoat.isRemoved())) {
-            currentScapegoat = null; // 清除离线的背锅人
-        }
-    }
-
-    /**
-     * 选择新的背锅人
-     */
-    private static void selectNewScapegoat(MinecraftServer server) {
-        List<ServerPlayerEntity> players = server.getPlayerManager().getPlayerList();
-        if (players.isEmpty()) return;
-
-        // 过滤掉上一个背锅人
-        List<ServerPlayerEntity> candidates = new ArrayList<>();
-        for (ServerPlayerEntity player : players) {
-            if (player != currentScapegoat && !player.isDisconnected()) {
-                candidates.add(player);
-            }
-        }
-
-        if (candidates.isEmpty()) {
-            candidates = new ArrayList<>(players); // 如果没有其他人，包括上次的背锅人
-        }
-
-        if (!candidates.isEmpty()) {
-            currentScapegoat = candidates.get(ThreadLocalRandom.current().nextInt(candidates.size()));
-            
-            // 广播模糊警告（支持多语言）
-            Text warning = Text.literal(com.example.config.LanguageManager.getMessage("damage_scapegoat_selected"))
-                .formatted(Formatting.DARK_RED, Formatting.BOLD);
-            for (ServerPlayerEntity player : players) {
-                player.sendMessage(warning, true);
-            }
-        }
+        ScapegoatSystem.tickScapegoat(server);
     }
 
     /**
      * 伤害背锅人：重定向伤害
      */
     public static boolean redirectDamageToScapegoat(LivingEntity victim, DamageSource source, float amount) {
-        if (!ChaosMod.config.damageScapegoatEnabled) return false;
-        if (victim.getWorld().isClient()) return false;
-        if (currentScapegoat == null) return false;
-        if (victim == currentScapegoat) return false; // 避免循环
-
-        try {
-            // 重定向伤害到背锅人
-            currentScapegoat.damage(source, amount);
-            
-            // 给背锅人发送提示（支持多语言）
-            currentScapegoat.sendMessage(Text.literal("💥 " + com.example.config.LanguageManager.getMessage("damage_absorbed"))
-                .formatted(Formatting.RED), true);
-                
-            return true; // 取消原始伤害
-        } catch (Exception e) {
-            return false;
-        }
+        return ScapegoatSystem.redirectDamageToScapegoat(victim, source, amount);
     }
 
     /**
      * 痛觉扩散：标记被打的玩家为"带电"
      */
     public static void markElectrified(LivingEntity entity) {
-        if (!ChaosMod.config.painSpreadEnabled) return;
-        if (entity.getWorld().isClient()) return;
-        if (!(entity instanceof PlayerEntity player)) return;
-
-        long currentTime = entity.getWorld().getTime();
-        ELECTRIFIED_PLAYERS.put(player, currentTime + ELECTRIFIED_DURATION);
-        
-        if (player instanceof ServerPlayerEntity serverPlayer) {
-            serverPlayer.sendMessage(Text.literal("⚡ " + com.example.config.LanguageManager.getMessage("electrified"))
-                .formatted(Formatting.YELLOW, Formatting.BOLD), true);
-        }
+        PainSpreadSystem.markElectrified(entity);
     }
 
     /**
      * 痛觉扩散：tick处理带电玩家
      */
     public static void tickElectrified(PlayerEntity player) {
-        if (!ChaosMod.config.painSpreadEnabled) return;
-        if (player.getWorld().isClient()) return;
-        if (!(player instanceof ServerPlayerEntity serverPlayer)) return;
-
-        Long electrifiedUntil = ELECTRIFIED_PLAYERS.get(player);
-        if (electrifiedUntil == null) return;
-
-        long currentTime = player.getWorld().getTime();
-        
-        // 检查是否已经过期
-        if (currentTime >= electrifiedUntil) {
-            ELECTRIFIED_PLAYERS.remove(player);
-            LIGHTNING_COOLDOWNS.remove(player);
-            serverPlayer.sendMessage(Text.literal("✅ " + com.example.config.LanguageManager.getMessage("electrified_ended"))
-                .formatted(Formatting.GREEN), true);
-            return;
-        }
-
-        // 每10 tick检查一次周围玩家
-        if (currentTime % 10 != 0) return;
-
-        // 搜索半径内的其他玩家
-        ServerWorld world = serverPlayer.getServerWorld();
-        Vec3d pos = player.getPos();
-        Box searchBox = new Box(pos.x - SPREAD_RADIUS, pos.y - SPREAD_RADIUS, pos.z - SPREAD_RADIUS,
-                               pos.x + SPREAD_RADIUS, pos.y + SPREAD_RADIUS, pos.z + SPREAD_RADIUS);
-
-        List<PlayerEntity> nearbyPlayers = world.getEntitiesByClass(PlayerEntity.class, searchBox, 
-            p -> p != player && p.squaredDistanceTo(player) <= SPREAD_RADIUS * SPREAD_RADIUS);
-
-        Set<PlayerEntity> cooldownSet = LIGHTNING_COOLDOWNS.computeIfAbsent(player, k -> new HashSet<>());
-        
-        for (PlayerEntity nearbyPlayer : nearbyPlayers) {
-            // 检查冷却
-            if (cooldownSet.contains(nearbyPlayer)) continue;
-            
-            // 添加到冷却列表
-            cooldownSet.add(nearbyPlayer);
-            
-            // 生成雷击
-            LightningEntity lightning = EntityType.LIGHTNING_BOLT.create(world);
-            if (lightning != null) {
-                lightning.refreshPositionAfterTeleport(nearbyPlayer.getX(), nearbyPlayer.getY(), nearbyPlayer.getZ());
-                lightning.setCosmetic(false); // 造成真实伤害
-                world.spawnEntity(lightning);
-            }
-            
-            // 发送消息
-            if (nearbyPlayer instanceof ServerPlayerEntity nearbyServerPlayer) {
-                nearbyServerPlayer.sendMessage(Text.literal("⚡ " + 
-                    String.format(com.example.config.LanguageManager.getMessage("struck_by_lightning"), 
-                    serverPlayer.getName().getString()))
-                    .formatted(Formatting.RED), true);
-            }
-        }
-
-        // 清理过期的冷却
-        if (currentTime % 20 == 0) { // 每秒清理一次
-            cooldownSet.clear();
-        }
+        PainSpreadSystem.tickElectrified(player);
     }
 
     /**
      * 获取当前背锅人（用于调试）
      */
     public static ServerPlayerEntity getCurrentScapegoat() {
-        return currentScapegoat;
+        return ScapegoatSystem.getCurrentScapegoat();
     }
 
     /**
@@ -651,7 +491,11 @@ public final class ChaosEffects {
      * 惊惧磁铁：tick处理磁化玩家
      */
     public static void tickPanicMagnet(ServerPlayerEntity player) {
-        if (!ChaosMod.config.panicMagnetEnabled) return;
+        if (!ChaosMod.config.panicMagnetEnabled) {
+            PANIC_MAGNETIZED_PLAYERS.remove(player);
+            PANIC_MAGNET_IMMUNITY.remove(player);
+            return;
+        }
         if (player.getWorld().isClient()) return;
 
         Long magnetizedUntil = PANIC_MAGNETIZED_PLAYERS.get(player);
@@ -768,20 +612,31 @@ public final class ChaosEffects {
      * 眩晕背锅侠：服务器tick时管理背锅侠系统
      */
     public static void tickVertigoScapegoat(MinecraftServer server) {
-        if (!ChaosMod.config.vertigoScapegoatEnabled) return;
+        if (!ChaosMod.config.vertigoScapegoatEnabled) {
+            vertigoScapegoatUuid = null;
+            visitedScapegoats.clear();
+            nextVertigoRollTick = 0;
+            return;
+        }
 
         long currentTick = server.getOverworld().getTime();
         
         // 检查是否需要选择新的背锅侠
         if (currentTick >= nextVertigoRollTick) {
             selectNewVertigoScapegoat(server);
-            nextVertigoRollTick = currentTick + VERTIGO_SCAPEGOAT_INTERVAL;
+            nextVertigoRollTick = currentTick + vertigoScapegoatIntervalTicks();
         }
 
         // 检查当前背锅侠是否仍然在线
-        if (vertigoScapegoat != null && (vertigoScapegoat.isDisconnected() || vertigoScapegoat.isRemoved())) {
-            vertigoScapegoat = null;
+        if (vertigoScapegoatUuid != null && server.getPlayerManager().getPlayer(vertigoScapegoatUuid) == null) {
+            vertigoScapegoatUuid = null;
+            nextVertigoRollTick = currentTick;
         }
+    }
+
+    public static void onVertigoIntervalChanged(MinecraftServer server) {
+        if (server == null || !ChaosMod.config.vertigoScapegoatEnabled) return;
+        nextVertigoRollTick = server.getOverworld().getTime() + vertigoScapegoatIntervalTicks();
     }
 
     /**
@@ -793,21 +648,23 @@ public final class ChaosEffects {
 
         // 过滤候选者：不包括上次的背锅侠且未被选过
         List<ServerPlayerEntity> candidates = allPlayers.stream()
-            .filter(p -> !visitedScapegoats.contains(p) && p != vertigoScapegoat)
-            .filter(p -> !p.isDisconnected())
+            .filter(p -> !visitedScapegoats.contains(p.getUuid()) && !p.getUuid().equals(vertigoScapegoatUuid))
+            .filter(p -> p.isAlive() && !p.isCreative() && !p.isSpectator() && !p.isDisconnected())
             .toList();
 
         // 如果所有人都被选过，重置访问集合
         if (candidates.isEmpty()) {
             visitedScapegoats.clear();
             candidates = allPlayers.stream()
-                .filter(p -> p != vertigoScapegoat && !p.isDisconnected())
+                .filter(p -> !p.getUuid().equals(vertigoScapegoatUuid))
+                .filter(p -> p.isAlive() && !p.isCreative() && !p.isSpectator() && !p.isDisconnected())
                 .toList();
         }
 
         if (!candidates.isEmpty()) {
-            vertigoScapegoat = candidates.get(ThreadLocalRandom.current().nextInt(candidates.size()));
-            visitedScapegoats.add(vertigoScapegoat);
+            ServerPlayerEntity selected = candidates.get(ThreadLocalRandom.current().nextInt(candidates.size()));
+            vertigoScapegoatUuid = selected.getUuid();
+            visitedScapegoats.add(vertigoScapegoatUuid);
             
             // 发送模糊警告（支持多语言）
             Text generalWarning = Text.literal(com.example.config.LanguageManager.getMessage("vertigo_target_selected"))
@@ -816,7 +673,7 @@ public final class ChaosEffects {
                 .formatted(Formatting.DARK_RED);
             
             for (ServerPlayerEntity player : allPlayers) {
-                if (player == vertigoScapegoat) {
+                if (player.getUuid().equals(vertigoScapegoatUuid)) {
                     player.sendMessage(scapegoatWarning, true);
                 } else {
                     player.sendMessage(generalWarning, true);
@@ -831,11 +688,13 @@ public final class ChaosEffects {
     public static boolean handleVertigoScapegoatDamage(LivingEntity victim, DamageSource source, float amount) {
         if (!ChaosMod.config.vertigoScapegoatEnabled) return false;
         if (victim.getWorld().isClient()) return false;
-        if (vertigoScapegoat == null) return false;
         if (!(victim instanceof ServerPlayerEntity victimPlayer)) return false;
 
         MinecraftServer server = victimPlayer.getServer();
         if (server == null) return false;
+        ServerPlayerEntity vertigoScapegoat = vertigoScapegoatUuid == null
+            ? null : server.getPlayerManager().getPlayer(vertigoScapegoatUuid);
+        if (vertigoScapegoat == null) return false;
 
         if (victimPlayer == vertigoScapegoat) {
             // 背锅侠自己受伤，给予10秒debuff并重新选择
@@ -858,7 +717,7 @@ public final class ChaosEffects {
             
             // 立即重新选择背锅侠
             selectNewVertigoScapegoat(server);
-            nextVertigoRollTick = server.getOverworld().getTime() + VERTIGO_SCAPEGOAT_INTERVAL;
+            nextVertigoRollTick = server.getOverworld().getTime() + vertigoScapegoatIntervalTicks();
             
             return false; // 不阻止原伤害
             
@@ -892,7 +751,7 @@ public final class ChaosEffects {
      * 获取当前眩晕背锅侠（用于调试）
      */
     public static ServerPlayerEntity getCurrentVertigoScapegoat() {
-        return vertigoScapegoat;
+        return null; // 调试接口无服务器参数，运行逻辑始终通过UUID从PlayerManager解析实时实体。
     }
 
     // ==================== v1.7.0 电击地狱级效果 ====================
@@ -904,8 +763,9 @@ public final class ChaosEffects {
     private static final ThreadLocal<Boolean> MOVEMENT_TAX_REENTRY = ThreadLocal.withInitial(() -> false);
 
     // === 控制癫痫Plus系统（独立的按键禁用机制） ===
-    private static final Map<ServerPlayerEntity, Long> CONTROL_SEIZURE_END_TIME = new WeakHashMap<>();
-    private static final Map<ServerPlayerEntity, String> CONTROL_SEIZURE_DISABLED_KEY = new WeakHashMap<>();
+    private static final Map<UUID, Long> CONTROL_SEIZURE_END_TIME = new HashMap<>();
+    private static final Map<UUID, String> CONTROL_SEIZURE_DISABLED_KEY = new HashMap<>();
+    private static final Set<UUID> CONTROL_SEIZURE_PENDING = new HashSet<>();
     private static final ThreadLocal<Boolean> CONTROL_SEIZURE_REENTRY = ThreadLocal.withInitial(() -> false);
     private static final long CONTROL_SEIZURE_DURATION = 1200; // 60秒 = 1200 ticks
 
@@ -976,7 +836,11 @@ public final class ChaosEffects {
      * 在ServerPlayerEntity#tick的Mixin中调用
      */
     public static void handleMovementTax(ServerPlayerEntity player) {
-        if (!ChaosMod.config.movementTaxEnabled) return;
+        if (!ChaosMod.config.movementTaxEnabled) {
+            LAST_POSITIONS.remove(player);
+            MOVEMENT_ACCUMULATOR.remove(player);
+            return;
+        }
         if (player.getWorld().isClient()) return;
         if (player.isCreative() || player.isSpectator()) return;
         if (MOVEMENT_TAX_REENTRY.get()) return;
@@ -986,6 +850,10 @@ public final class ChaosEffects {
         
         if (lastPos != null) {
             double distance = currentPos.distanceTo(lastPos);
+            if (distance > 8.0) {
+                LAST_POSITIONS.put(player, currentPos);
+                return;
+            }
             double accumulator = MOVEMENT_ACCUMULATOR.getOrDefault(player, 0.0) + distance;
             
             // 每满10格扣血
@@ -1014,21 +882,25 @@ public final class ChaosEffects {
     public static void handleControlSeizurePlus(ServerPlayerEntity player) {
         if (!ChaosMod.config.controlSeizurePlusEnabled) return;
         if (player.getWorld().isClient()) return;
+        CONTROL_SEIZURE_PENDING.add(player.getUuid());
+    }
 
-        long currentTime = player.getServerWorld().getTime();
-        CONTROL_SEIZURE_END_TIME.put(player, currentTime + CONTROL_SEIZURE_DURATION);
+    public static void activateControlSeizurePlus(ServerPlayerEntity player) {
+        if (!CONTROL_SEIZURE_PENDING.remove(player.getUuid())) return;
+        if (!ChaosMod.config.controlSeizurePlusEnabled) return;
+
+        long currentTime = player.getServer().getTicks();
+        CONTROL_SEIZURE_END_TIME.put(player.getUuid(), currentTime + CONTROL_SEIZURE_DURATION);
         
         // 随机选择WASD中的一个按键禁用
         String[] wasdKeys = {"forward", "left", "back", "right"}; // W A S D
         String keyToDisable = wasdKeys[ThreadLocalRandom.current().nextInt(wasdKeys.length)];
         
         // 使用独立的禁用系统（不依赖DISABLED_KEYS）
-        CONTROL_SEIZURE_DISABLED_KEY.put(player, keyToDisable);
+        CONTROL_SEIZURE_DISABLED_KEY.put(player.getUuid(), keyToDisable);
         
         // 发送独立的按键禁用包
-        Set<String> onlyThisKey = new HashSet<>();
-        onlyThisKey.add(keyToDisable);
-        KeyDisableS2CPacket.send(player, onlyThisKey);
+        syncCombinedDisabledKeys(player);
         
         // 通知玩家
         String keyName = getKeyDisplayName(keyToDisable);
@@ -1040,21 +912,31 @@ public final class ChaosEffects {
      * 在ServerPlayerEntity#tick的Mixin中调用
      */
     public static void tickControlSeizurePlus(ServerPlayerEntity player) {
-        if (!ChaosMod.config.controlSeizurePlusEnabled) return;
+        if (!ChaosMod.config.keyDisableEnabled) {
+            boolean regularChanged = DAMAGE_COUNTS.remove(player) != null;
+            regularChanged |= DISABLED_KEYS.remove(player) != null;
+            if (regularChanged) syncCombinedDisabledKeys(player);
+        }
+        if (!ChaosMod.config.controlSeizurePlusEnabled) {
+            boolean changed = CONTROL_SEIZURE_END_TIME.remove(player.getUuid()) != null;
+            changed |= CONTROL_SEIZURE_DISABLED_KEY.remove(player.getUuid()) != null;
+            changed |= CONTROL_SEIZURE_PENDING.remove(player.getUuid());
+            if (changed) syncCombinedDisabledKeys(player);
+            return;
+        }
         if (player.getWorld().isClient()) return;
         if (CONTROL_SEIZURE_REENTRY.get()) return;
 
-        Long endTime = CONTROL_SEIZURE_END_TIME.get(player);
+        Long endTime = CONTROL_SEIZURE_END_TIME.get(player.getUuid());
         if (endTime == null) return;
 
-        long currentTime = player.getServerWorld().getTime();
+        long currentTime = player.getServer().getTicks();
         
         // 检查是否已过期
         if (currentTime >= endTime) {
-            CONTROL_SEIZURE_END_TIME.remove(player);
-            CONTROL_SEIZURE_DISABLED_KEY.remove(player);
-            // 发送空的KeyDisableS2CPacket恢复键位
-            KeyDisableS2CPacket.send(player, new HashSet<>());
+            CONTROL_SEIZURE_END_TIME.remove(player.getUuid());
+            CONTROL_SEIZURE_DISABLED_KEY.remove(player.getUuid());
+            syncCombinedDisabledKeys(player);
             player.sendMessage(Text.literal(com.example.config.LanguageManager.getMessage("control_seizure_ended")).formatted(Formatting.GREEN), true);
             return;
         }
@@ -1097,8 +979,30 @@ public final class ChaosEffects {
     public static void cleanupPlayerData(ServerPlayerEntity player) {
         LAST_POSITIONS.remove(player);
         MOVEMENT_ACCUMULATOR.remove(player);
-        CONTROL_SEIZURE_END_TIME.remove(player);
-        CONTROL_SEIZURE_DISABLED_KEY.remove(player);
+        DAMAGE_COUNTS.remove(player);
+        DISABLED_KEYS.remove(player);
+        DEATH_FLAGS.remove(player);
+        LAST_EFFECT_TIME.remove(player);
+        DELAYED_DAMAGE_QUEUES.remove(player);
+        PANIC_MAGNETIZED_PLAYERS.remove(player);
+        PANIC_MAGNET_IMMUNITY.remove(player);
+        CONTROL_SEIZURE_END_TIME.remove(player.getUuid());
+        CONTROL_SEIZURE_DISABLED_KEY.remove(player.getUuid());
+        CONTROL_SEIZURE_PENDING.remove(player.getUuid());
+        PainSpreadSystem.cleanupPlayer(player);
+    }
+
+    private static void syncCombinedDisabledKeys(ServerPlayerEntity player) {
+        Set<String> combined = new HashSet<>();
+        if (ChaosMod.config.keyDisableEnabled) {
+            Set<String> regular = DISABLED_KEYS.get(player);
+            if (regular != null) combined.addAll(regular);
+        }
+        if (ChaosMod.config.controlSeizurePlusEnabled) {
+            String seizureKey = CONTROL_SEIZURE_DISABLED_KEY.get(player.getUuid());
+            if (seizureKey != null) combined.add(seizureKey);
+        }
+        KeyDisableS2CPacket.send(player, combined);
     }
 
 }

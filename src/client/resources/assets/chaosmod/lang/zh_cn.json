@@ -15,6 +15,8 @@
   "chaosmod.gui.admin_required": "需要管理员权限",
   "chaosmod.gui.back": "返回",
   "chaosmod.gui.language": "🌐 语言",
+  "chaosmod.gui.interval": "触发间隔: %d秒",
+  "chaosmod.gui.probability": "触发概率: %d%%",
   
   "chaosmod.config.allHostileEnabled": "所有生物敌对",
   "chaosmod.config.mobIgniteEnabled": "被怪命中点燃",
@@ -25,7 +27,7 @@
   "chaosmod.config.enderDragonBucketEnabled": "被龙打→水桶变牛奶",
   "chaosmod.config.enderDragonKillEnabled": "击杀末影龙者自杀",
   "chaosmod.config.playerDamageShareEnabled": "贴身平摊伤害",
-  "chaosmod.config.sharedHealthEnabled": "共享生命(镜像)",
+  "chaosmod.config.sharedHealthEnabled": "共享生命与饥饿",
   "chaosmod.config.sharedDamageSplitEnabled": "全服平摊伤害",
   "chaosmod.config.randomDamageEnabled": "随机转移伤害",
   "chaosmod.config.shieldNerfEnabled": "盾牌仅吸收80%",
@@ -69,8 +71,16 @@
   "chaosmod.config.multiplayerRouletteEnabled": "死亡轮盘(多人版)",
   "chaosmod.config.timedPositionSwapEnabled": "定时位置互换",
   "chaosmod.config.forcedSprintEnabled": "强制奔跑",
+  "chaosmod.config.periodicNegativeEffectEnabled": "周期随机负面效果",
+  "chaosmod.config.weaponSlipEnabled": "武器脱手",
+  "chaosmod.config.magmaBetrayalEnabled": "地面背叛",
+  "chaosmod.config.timeReboundEnabled": "时间回弹",
+  "chaosmod.config.burdenCollapseEnabled": "负重崩塌",
   
   "chaosmod.electric_poison_damage": "电击中毒癫痫：享受电击治疗！",
+  "chaosmod.effect.periodic_negative_effect": "你获得了周期负面效果：%s",
+  "chaosmod.effect.burden_collapse_warning": "负重正在压垮你……5秒后结算",
+  "chaosmod.effect.burden_collapse_result": "负重结算：%d个槽位，受到%.1f颗心伤害",
   
   "chaosmod.effect.forced_tether_start": "你与玩家 %s 被强制捆绑了！保持15格内，否则双方扣血！",
   "chaosmod.effect.forced_tether_too_far": "距离过远！正在扣血！",
@@ -155,7 +165,7 @@
   "chaosmod.tooltip.enderDragonBucketEnabled": "龙把水桶变牛奶",
   "chaosmod.tooltip.enderDragonKillEnabled": "杀龙=自杀",
   "chaosmod.tooltip.playerDamageShareEnabled": "与附近玩家分担伤害",
-  "chaosmod.tooltip.sharedHealthEnabled": "一人死=全员死",
+  "chaosmod.tooltip.sharedHealthEnabled": "全服玩家共享同一生命、饥饿和饱和度",
   "chaosmod.tooltip.sharedDamageSplitEnabled": "全服分担伤害",
   "chaosmod.tooltip.randomDamageEnabled": "伤害随机转移",
   "chaosmod.tooltip.shieldNerfEnabled": "盾牌只挡80%",
@@ -195,5 +205,10 @@
   "chaosmod.tooltip.hpAveragingEnabled": "60秒=随机两人血量平均",
   "chaosmod.tooltip.multiplayerRouletteEnabled": "90秒=随机抽奖惩罚",
   "chaosmod.tooltip.timedPositionSwapEnabled": "60秒=随机交换位置",
-  "chaosmod.tooltip.forcedSprintEnabled": "90秒=一人必须持续移动"
+  "chaosmod.tooltip.forcedSprintEnabled": "90秒=一人必须持续移动",
+  "chaosmod.tooltip.periodicNegativeEffectEnabled": "每隔设定秒数获得一个随机负面效果，不含增益",
+  "chaosmod.tooltip.weaponSlipEnabled": "近战命中敌对生物时概率丢出主手武器",
+  "chaosmod.tooltip.magmaBetrayalEnabled": "随机玩家脚下实体方块变成岩浆块10秒",
+  "chaosmod.tooltip.timeReboundEnabled": "5秒后回到记录位置并固定扣2颗心",
+  "chaosmod.tooltip.burdenCollapseEnabled": "5秒后按背包占用槽位扣血并获得缓慢II"
 }

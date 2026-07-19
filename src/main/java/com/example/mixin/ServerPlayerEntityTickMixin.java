@@ -22,10 +22,13 @@ public class ServerPlayerEntityTickMixin {
     
     @Unique
     private int chaos$craftingTimer = 0;
+    @Unique private boolean chaos$jumpStartedOnGround = false;
+    @Unique private boolean chaos$wasOnGround = true;
     
     @Inject(method = "tick", at = @At("TAIL"))
     private void chaos$serverPlayerTick(CallbackInfo ci) {
         ServerPlayerEntity player = (ServerPlayerEntity)(Object)this;
+        chaos$tickFallTrap(player);
         
         // === 恐高症效果 ===
         if (ChaosMod.config.acrophobiaEnabled) {
@@ -47,7 +50,7 @@ public class ServerPlayerEntityTickMixin {
         com.example.util.ChaosEffects.tickPanicMagnet(player);
         
         // 痛觉扩散：处理带电状态的tick逻辑（原有）
-        com.example.util.ChaosEffects.tickElectrified(player);
+        com.example.util.PainSpreadSystem.tickElectrified(player);
         
         // === v1.7.0 电击地狱级效果 ===
         // 移动税：处理玩家移动累计
@@ -55,6 +58,28 @@ public class ServerPlayerEntityTickMixin {
         
         // 控制癫痫Plus：每5秒扣血处理
         com.example.util.ChaosEffects.tickControlSeizurePlus(player);
+
+        // 第51项：每名玩家独立循环的随机负面效果
+        com.example.util.PeriodicNegativeEffectSystem.tickPlayer(player);
+    }
+
+    @Unique
+    private void chaos$tickFallTrap(ServerPlayerEntity player) {
+        boolean onGround = player.isOnGround();
+        if (!ChaosMod.config.fallTrapEnabled || player.isCreative() || player.isSpectator()) {
+            chaos$jumpStartedOnGround = false;
+            chaos$wasOnGround = onGround;
+            return;
+        }
+        if (chaos$wasOnGround && !onGround && player.getVelocity().y > 0.0) {
+            chaos$jumpStartedOnGround = true;
+        } else if (!chaos$wasOnGround && onGround) {
+            if (chaos$jumpStartedOnGround && player.fallDistance < 1.0F && player.getRandom().nextFloat() < 0.20F) {
+                player.damage(player.getDamageSources().generic(), 1.0F);
+            }
+            chaos$jumpStartedOnGround = false;
+        }
+        chaos$wasOnGround = onGround;
     }
     
     private void chaos$tickAcrophobia(ServerPlayerEntity player) {

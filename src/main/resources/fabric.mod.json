@@ -1,9 +1,9 @@
 {
   "schemaVersion": 1,
   "id": "chaosmod",
-  "version": "1.7.0-Release",
+  "version": "1.8.0",
   "name": "Chaos Mod 1.21",
-  "description": "50 evil effects including multiplayer betrayal effects: forced tether, HP averaging, multiplayer roulette, timed position swap, forced sprint + all previous 45 effects + full multilingual support + admin permission system.",
+  "description": "55 chaos effects, including server-authoritative multiplayer effects, synchronized settings, multilingual UI, and admin permission controls.",
   "environment": "*",
   "entrypoints": {
     "main": [

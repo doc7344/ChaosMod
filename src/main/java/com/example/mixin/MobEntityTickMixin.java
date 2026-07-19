@@ -23,12 +23,37 @@ public abstract class MobEntityTickMixin {
 
     @Unique private int chaos$ticker;
     @Unique private int chaos$attackCd; // melee cooldown in ticks
+    @Unique private boolean chaos$allHostileWasActive;
+    @Unique private double chaos$nativeNavigationMultiplier = Double.NaN;
+    @Unique private PlayerEntity chaos$forcedTarget;
 
     @Inject(method = "tick", at = @At("TAIL"))
     private void chaos$aggroTick(CallbackInfo ci) {
-        if (!ChaosMod.config.allHostileEnabled) return;
         MobEntity self = (MobEntity)(Object)this;
         if (self.getWorld().isClient()) return;
+        if (!ChaosMod.config.allHostileEnabled) {
+            if (chaos$allHostileWasActive) {
+                chaos$releaseForcedAggro(self);
+                chaos$nativeNavigationMultiplier = Double.NaN;
+            } else {
+                chaos$rememberNativeNavigationMultiplier(self);
+            }
+            chaos$allHostileWasActive = false;
+            return;
+        }
+        if (!chaos$allHostileWasActive) {
+            // Preserve the multiplier most recently supplied by this entity's own vanilla AI.
+            // MoveControl multiplies it by GENERIC_MOVEMENT_SPEED, so villagers, animals,
+            // golems and monsters keep their individual native movement speed.
+            chaos$rememberNativeNavigationMultiplier(self);
+            chaos$allHostileWasActive = true;
+        }
+        if (!chaos$isValidNavigationMultiplier(chaos$nativeNavigationMultiplier)) {
+            // A newly spawned or completely idle mob may not have issued a vanilla movement
+            // command yet. Keep observing instead of inventing a shared fallback speed.
+            chaos$rememberNativeNavigationMultiplier(self);
+            if (!chaos$isValidNavigationMultiplier(chaos$nativeNavigationMultiplier)) return;
+        }
         ServerWorld sw = (ServerWorld) self.getWorld();
 
         chaos$ticker++;
@@ -40,21 +65,27 @@ public abstract class MobEntityTickMixin {
         double range = 16.0;
         try { range = self.getAttributeValue(EntityAttributes.GENERIC_FOLLOW_RANGE); } catch (Throwable ignored) {}
         if (range <= 0) range = 16.0;
+        final double targetRange = range;
 
-        PlayerEntity target = sw.getClosestPlayer(self, range);
-        if (target == null || target.isCreative() || target.isSpectator()) {
-            self.setTarget(null);
+        PlayerEntity target = sw.getPlayers().stream()
+            .filter(PlayerEntity::isAlive)
+            .filter(p -> !p.isCreative() && !p.isSpectator())
+            .filter(p -> p.squaredDistanceTo(self) <= targetRange * targetRange)
+            .min(java.util.Comparator.comparingDouble(p -> p.squaredDistanceTo(self)))
+            .orElse(null);
+        if (target == null) {
+            chaos$releaseForcedAggro(self);
             return;
         }
 
         // Let vanilla AI see the target for better aggression
+        chaos$forcedTarget = target;
         try { self.setTarget(target); } catch (Throwable ignored) {}
 
         // Navigate
-        double speed = ThreatProfiles.chaseSpeed(self.getType());
         try {
             EntityNavigation nav = self.getNavigation();
-            if (nav != null) nav.startMovingTo(target, speed);
+            if (nav != null) nav.startMovingTo(target, chaos$nativeNavigationMultiplier);
         } catch (Throwable ignored) {}
 
         // Melee range check (3D distance including vertical)
@@ -71,14 +102,19 @@ public abstract class MobEntityTickMixin {
         if (distSq <= reachSq) {
             if (chaos$attackCd == 0) {
                 boolean hit = false;
+                DamageRouting.beginRandomTransferProbe();
                 try {
                     hit = self.tryAttack(target); // vanilla-style attack: handles damage/anim/horizontal KB
                 } catch (Throwable ignored) {}
+                boolean randomTransferHandled = DamageRouting.consumeRandomTransferHandled();
 
-                // Ensure special vertical knockback exists for IG/Ravager/Warden
-                chaos$applySpecialVerticalKnockup(self, target);
+                // 随机转移时，实际承伤者的击退已由 DamageRouting 处理；
+                // 不能再把原目标击飞，造成两名玩家同时受到攻击反馈。
+                if (!randomTransferHandled) {
+                    chaos$applySpecialVerticalKnockup(self, target);
+                }
 
-                if (!hit) {
+                if (!hit && !randomTransferHandled) {
                     // Fallback contact hit + knockback if entity lacks real melee
                     chaos$contactHitAndKnock(self, target, sw);
                 }
@@ -121,6 +157,50 @@ public abstract class MobEntityTickMixin {
                 chaos$attackCd = cdTicks;
             }
         }
+    }
+
+    @Unique
+    private void chaos$rememberNativeNavigationMultiplier(MobEntity self) {
+        try {
+            double multiplier = self.getMoveControl().getSpeed();
+            if (chaos$isValidNavigationMultiplier(multiplier)) {
+                chaos$nativeNavigationMultiplier = multiplier;
+                return;
+            }
+        } catch (Throwable ignored) { }
+
+        // Some idle controls expose zero. Recover the same multiplier from the entity's
+        // current vanilla movement speed and its own movement-speed attribute when possible.
+        try {
+            double attributeSpeed = self.getAttributeValue(EntityAttributes.GENERIC_MOVEMENT_SPEED);
+            double currentMovementSpeed = self.getMovementSpeed();
+            if (attributeSpeed > 0.0D && currentMovementSpeed > 0.0D) {
+                double multiplier = currentMovementSpeed / attributeSpeed;
+                if (chaos$isValidNavigationMultiplier(multiplier)) {
+                    chaos$nativeNavigationMultiplier = multiplier;
+                }
+            }
+        } catch (Throwable ignored) { }
+    }
+
+    @Unique
+    private static boolean chaos$isValidNavigationMultiplier(double multiplier) {
+        return Double.isFinite(multiplier) && multiplier > 0.0D;
+    }
+
+    @Unique
+    private void chaos$releaseForcedAggro(MobEntity self) {
+        if (chaos$forcedTarget == null) return;
+        try {
+            if (self.getTarget() == chaos$forcedTarget) {
+                self.setTarget(null);
+            }
+        } catch (Throwable ignored) { }
+        try {
+            EntityNavigation navigation = self.getNavigation();
+            if (navigation != null) navigation.stop();
+        } catch (Throwable ignored) { }
+        chaos$forcedTarget = null;
     }
 
     @Unique

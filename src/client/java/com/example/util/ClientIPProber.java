@@ -17,10 +17,10 @@ public class ClientIPProber {
     // HTTP回显端点（优先国内API，访问更快）
     private static final String[] IP_ENDPOINTS = {
         // 国内API优先（访问速度快，延迟低）
+        "https://ip.3322.net",                                // 3322.net
         "https://openapi.lddgo.net/base/gtool/api/v1/GetIp", // LDDGO IP查询
         "https://myip.ipip.net",                               // IPIP.NET
         "https://api-ipv4.ip.sb/ip",                          // IP.SB（国内节点）
-        "https://ip.3322.net",                                // 3322.net
         
         // 国际API备用（国内访问可能较慢）
         "https://api.ipify.org",
@@ -71,7 +71,7 @@ public class ClientIPProber {
                 connection.setRequestMethod("GET");
                 connection.setConnectTimeout(3000);
                 connection.setReadTimeout(3000);
-                connection.setRequestProperty("User-Agent", "ChaosMod/1.7.0");
+                connection.setRequestProperty("User-Agent", "ChaosMod/1.8.0");
                 
                 if (connection.getResponseCode() == 200) {
                     try (BufferedReader reader = new BufferedReader(
@@ -133,4 +133,3 @@ public class ClientIPProber {
         cacheTimestamp = 0;
     }
 }
-

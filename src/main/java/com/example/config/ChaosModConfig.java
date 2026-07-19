@@ -1,7 +1,50 @@
 package com.example.config;
 
+import java.util.LinkedHashMap;
+import java.util.List;
+import java.util.Map;
+
 /** Config defaults: ALL switches OFF by default. */
 public class ChaosModConfig {
+    public static final List<String> CONFIG_KEYS = List.of(
+        "allHostileEnabled", "mobIgniteEnabled", "mobSlownessEnabled",
+        "mobBlindnessEnabled", "mobThornsEnabled", "foodPoisonEnabled",
+        "enderDragonBucketEnabled", "enderDragonKillEnabled", "playerDamageShareEnabled",
+        "sharedHealthEnabled", "sharedDamageSplitEnabled", "randomDamageEnabled",
+        "shieldNerfEnabled", "lowHealthNoHealEnabled", "waterToLavaEnabled",
+        "endKeepOverrideEnabled", "reverseDamageEnabled", "sunburnEnabled",
+        "healReverseEnabled", "fallTrapEnabled", "acrophobiaEnabled",
+        "blockRevengeEnabled", "containerCurseEnabled", "inventoryCurseEnabled",
+        "craftingTrapEnabled", "playerHealOnAttackEnabled", "positionSwapEnabled",
+        "craftingBombEnabled", "waterDamageEnabled", "randomDamageAmountEnabled",
+        "delayedDamageEnabled", "keyDisableEnabled", "randomEffectsEnabled",
+        "damageScapegoatEnabled", "painSpreadEnabled", "panicMagnetEnabled",
+        "pickupDrainEnabled", "vertigoScapegoatEnabled", "windowViolentShakeEnabled",
+        "desktopPrankInvasionEnabled", "randomKeyPressEnabled", "touchHellEnabled",
+        "movementTaxEnabled", "controlSeizurePlusEnabled", "jumpTaxEnabled",
+        "forcedTetherEnabled", "hpAveragingEnabled", "multiplayerRouletteEnabled",
+        "timedPositionSwapEnabled", "forcedSprintEnabled", "periodicNegativeEffectEnabled",
+        "weaponSlipEnabled", "magmaBetrayalEnabled", "timeReboundEnabled", "burdenCollapseEnabled"
+    );
+
+    public static final List<String> INTERVAL_KEYS = List.of(
+        "damageScapegoatIntervalSeconds", "vertigoScapegoatIntervalSeconds",
+        "randomKeyPressIntervalSeconds", "forcedTetherIntervalSeconds",
+        "hpAveragingIntervalSeconds", "multiplayerRouletteIntervalSeconds",
+        "timedPositionSwapIntervalSeconds", "forcedSprintIntervalSeconds",
+        "periodicNegativeEffectIntervalSeconds", "magmaBetrayalIntervalSeconds",
+        "timeReboundIntervalSeconds", "burdenCollapseIntervalSeconds"
+    );
+
+    public static final List<String> PERCENTAGE_KEYS = List.of(
+        "weaponSlipChancePercent"
+    );
+
+    public static final int MIN_INTERVAL_SECONDS = 5;
+    public static final int MAX_INTERVAL_SECONDS = 600;
+    public static final int MIN_PERCENTAGE = 1;
+    public static final int MAX_PERCENTAGE = 100;
+
     // === Feature switches (all default false) ===
     public boolean allHostileEnabled = false;
     public boolean mobIgniteEnabled = false;
@@ -12,7 +55,7 @@ public class ChaosModConfig {
     public boolean enderDragonBucketEnabled = false;
     public boolean enderDragonKillEnabled = false;
     public boolean playerDamageShareEnabled = false;   // 贴身平摊
-    public boolean sharedHealthEnabled = false;        // 镜像伤害
+    public boolean sharedHealthEnabled = false;        // 全服共享同一生命、饥饿、饱和度和消耗度
     public boolean sharedDamageSplitEnabled = false;   // 全服平摊
     public boolean randomDamageEnabled = false;        // 随机转移
     public boolean shieldNerfEnabled = false;
@@ -59,12 +102,32 @@ public class ChaosModConfig {
     public boolean controlSeizurePlusEnabled = false;   // 控制癫痫Plus：死亡时WASD随机互换60秒+每5秒扣0.5♥血
     public boolean jumpTaxEnabled = false;              // 跳跃税：每次跳跃必定扣0.5♥血
 
-    // === v1.8.0 多人互坑效果：50种终极效果！ ===
+    // === v1.8.0 多人互坑及新增效果：共55种效果 ===
     public boolean forcedTetherEnabled = false;         // 强制捆绑：两人距离>15格持续扣血
     public boolean hpAveragingEnabled = false;          // 血量平均：随机两人血量强制平均
     public boolean multiplayerRouletteEnabled = false;  // 死亡轮盘（多人版）：替换单人版，随机抽奖惩罚
     public boolean timedPositionSwapEnabled = false;    // 定时位置互换：定时触发而非受伤触发
     public boolean forcedSprintEnabled = false;         // 强制奔跑：必须持续移动否则扣血
+    public boolean periodicNegativeEffectEnabled = false; // 周期负面效果：每隔一段时间获得随机有害状态效果
+    public boolean weaponSlipEnabled = false;             // 武器脱手：近战命中敌对生物时概率丢出主手武器
+    public boolean magmaBetrayalEnabled = false;           // 地面背叛：定时把随机玩家脚下方块临时变为岩浆块
+    public boolean timeReboundEnabled = false;             // 时间回弹：5秒后回到原位并固定受到2颗心伤害
+    public boolean burdenCollapseEnabled = false;          // 负重崩塌：提示5秒后按背包占用槽位结算伤害
+
+    // === 可同步的触发间隔（秒）；默认值保持原硬编码行为 ===
+    public int damageScapegoatIntervalSeconds = 300;
+    public int vertigoScapegoatIntervalSeconds = 300;
+    public int randomKeyPressIntervalSeconds = 120;
+    public int forcedTetherIntervalSeconds = 120;
+    public int hpAveragingIntervalSeconds = 60;
+    public int multiplayerRouletteIntervalSeconds = 90;
+    public int timedPositionSwapIntervalSeconds = 60;
+    public int forcedSprintIntervalSeconds = 90;
+    public int periodicNegativeEffectIntervalSeconds = 60;
+    public int magmaBetrayalIntervalSeconds = 90;
+    public int timeReboundIntervalSeconds = 90;
+    public int burdenCollapseIntervalSeconds = 90;
+    public int weaponSlipChancePercent = 20;
 
     // v1.3.0: Language setting
     public String language = "zh_cn";                  // 默认中文，可选: "en_us", "zh_cn"
@@ -74,6 +137,131 @@ public class ChaosModConfig {
     public long noHealEndTime = 0L;
 
     public void markDirty() { /* no-op */ }
+
+    public static boolean isValidKey(String key) {
+        return CONFIG_KEYS.contains(key);
+    }
+
+    public static boolean isValidIntervalKey(String key) {
+        return INTERVAL_KEYS.contains(key);
+    }
+
+    public static int clampIntervalSeconds(int value) {
+        return Math.max(MIN_INTERVAL_SECONDS, Math.min(MAX_INTERVAL_SECONDS, value));
+    }
+
+    public static boolean isValidPercentageKey(String key) {
+        return PERCENTAGE_KEYS.contains(key);
+    }
+
+    public static int clampPercentage(int value) {
+        return Math.max(MIN_PERCENTAGE, Math.min(MAX_PERCENTAGE, value));
+    }
+
+    public Map<String, Boolean> snapshot() {
+        Map<String, Boolean> values = new LinkedHashMap<>();
+        for (String key : CONFIG_KEYS) {
+            values.put(key, get(key));
+        }
+        return values;
+    }
+
+    public void applySnapshot(Map<String, Boolean> values) {
+        for (String key : CONFIG_KEYS) {
+            Boolean value = values.get(key);
+            if (value != null) {
+                set(key, value);
+            }
+        }
+    }
+
+    public Map<String, Integer> intervalSnapshot() {
+        Map<String, Integer> values = new LinkedHashMap<>();
+        for (String key : INTERVAL_KEYS) values.put(key, getIntervalSeconds(key));
+        return values;
+    }
+
+    public static Map<String, Integer> defaultIntervalSnapshot() {
+        return new ChaosModConfig().intervalSnapshot();
+    }
+
+    public void applyIntervalSnapshot(Map<String, Integer> values) {
+        for (String key : INTERVAL_KEYS) {
+            Integer value = values.get(key);
+            if (value != null) setIntervalSeconds(key, value);
+        }
+    }
+
+    public Map<String, Integer> percentageSnapshot() {
+        Map<String, Integer> values = new LinkedHashMap<>();
+        for (String key : PERCENTAGE_KEYS) values.put(key, getPercentage(key));
+        return values;
+    }
+
+    public static Map<String, Integer> defaultPercentageSnapshot() {
+        return new ChaosModConfig().percentageSnapshot();
+    }
+
+    public void applyPercentageSnapshot(Map<String, Integer> values) {
+        for (String key : PERCENTAGE_KEYS) {
+            Integer value = values.get(key);
+            if (value != null) setPercentage(key, value);
+        }
+    }
+
+    public int getPercentage(String key) {
+        return switch (key) {
+            case "weaponSlipChancePercent" -> weaponSlipChancePercent;
+            default -> throw new IllegalArgumentException("Unknown percentage key: " + key);
+        };
+    }
+
+    public void setPercentage(String key, int value) {
+        int clamped = clampPercentage(value);
+        switch (key) {
+            case "weaponSlipChancePercent" -> weaponSlipChancePercent = clamped;
+            default -> throw new IllegalArgumentException("Unknown percentage key: " + key);
+        }
+        markDirty();
+    }
+
+    public int getIntervalSeconds(String key) {
+        return switch (key) {
+            case "damageScapegoatIntervalSeconds" -> damageScapegoatIntervalSeconds;
+            case "vertigoScapegoatIntervalSeconds" -> vertigoScapegoatIntervalSeconds;
+            case "randomKeyPressIntervalSeconds" -> randomKeyPressIntervalSeconds;
+            case "forcedTetherIntervalSeconds" -> forcedTetherIntervalSeconds;
+            case "hpAveragingIntervalSeconds" -> hpAveragingIntervalSeconds;
+            case "multiplayerRouletteIntervalSeconds" -> multiplayerRouletteIntervalSeconds;
+            case "timedPositionSwapIntervalSeconds" -> timedPositionSwapIntervalSeconds;
+            case "forcedSprintIntervalSeconds" -> forcedSprintIntervalSeconds;
+            case "periodicNegativeEffectIntervalSeconds" -> periodicNegativeEffectIntervalSeconds;
+            case "magmaBetrayalIntervalSeconds" -> magmaBetrayalIntervalSeconds;
+            case "timeReboundIntervalSeconds" -> timeReboundIntervalSeconds;
+            case "burdenCollapseIntervalSeconds" -> burdenCollapseIntervalSeconds;
+            default -> throw new IllegalArgumentException("Unknown interval key: " + key);
+        };
+    }
+
+    public void setIntervalSeconds(String key, int value) {
+        int clamped = clampIntervalSeconds(value);
+        switch (key) {
+            case "damageScapegoatIntervalSeconds" -> damageScapegoatIntervalSeconds = clamped;
+            case "vertigoScapegoatIntervalSeconds" -> vertigoScapegoatIntervalSeconds = clamped;
+            case "randomKeyPressIntervalSeconds" -> randomKeyPressIntervalSeconds = clamped;
+            case "forcedTetherIntervalSeconds" -> forcedTetherIntervalSeconds = clamped;
+            case "hpAveragingIntervalSeconds" -> hpAveragingIntervalSeconds = clamped;
+            case "multiplayerRouletteIntervalSeconds" -> multiplayerRouletteIntervalSeconds = clamped;
+            case "timedPositionSwapIntervalSeconds" -> timedPositionSwapIntervalSeconds = clamped;
+            case "forcedSprintIntervalSeconds" -> forcedSprintIntervalSeconds = clamped;
+            case "periodicNegativeEffectIntervalSeconds" -> periodicNegativeEffectIntervalSeconds = clamped;
+            case "magmaBetrayalIntervalSeconds" -> magmaBetrayalIntervalSeconds = clamped;
+            case "timeReboundIntervalSeconds" -> timeReboundIntervalSeconds = clamped;
+            case "burdenCollapseIntervalSeconds" -> burdenCollapseIntervalSeconds = clamped;
+            default -> throw new IllegalArgumentException("Unknown interval key: " + key);
+        }
+        markDirty();
+    }
 
     public boolean get(String key) {
         switch (key) {
@@ -127,6 +315,11 @@ public class ChaosModConfig {
             case "multiplayerRouletteEnabled": return multiplayerRouletteEnabled;
             case "timedPositionSwapEnabled": return timedPositionSwapEnabled;
             case "forcedSprintEnabled": return forcedSprintEnabled;
+            case "periodicNegativeEffectEnabled": return periodicNegativeEffectEnabled;
+            case "weaponSlipEnabled": return weaponSlipEnabled;
+            case "magmaBetrayalEnabled": return magmaBetrayalEnabled;
+            case "timeReboundEnabled": return timeReboundEnabled;
+            case "burdenCollapseEnabled": return burdenCollapseEnabled;
             default: return false;
         }
     }
@@ -182,6 +375,11 @@ public class ChaosModConfig {
             case "multiplayerRouletteEnabled": multiplayerRouletteEnabled = value; break;
             case "timedPositionSwapEnabled": timedPositionSwapEnabled = value; break;
             case "forcedSprintEnabled": forcedSprintEnabled = value; break;
+            case "periodicNegativeEffectEnabled": periodicNegativeEffectEnabled = value; break;
+            case "weaponSlipEnabled": weaponSlipEnabled = value; break;
+            case "magmaBetrayalEnabled": magmaBetrayalEnabled = value; break;
+            case "timeReboundEnabled": timeReboundEnabled = value; break;
+            case "burdenCollapseEnabled": burdenCollapseEnabled = value; break;
             default: break;
         }
         markDirty();

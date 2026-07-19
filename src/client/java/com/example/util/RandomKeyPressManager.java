@@ -2,13 +2,8 @@ package com.example.util;
 
 import com.example.network.RandomKeyPressC2SPacket;
 import net.fabricmc.fabric.api.client.event.lifecycle.v1.ClientTickEvents;
-import net.fabricmc.fabric.api.networking.v1.PacketByteBufs;
 import net.fabricmc.fabric.api.client.networking.v1.ClientPlayNetworking;
 import net.minecraft.client.MinecraftClient;
-import net.minecraft.client.option.KeyBinding;
-import net.minecraft.network.PacketByteBuf;
-
-import java.util.*;
 
 /**
  * 电击中毒管理器
@@ -16,11 +11,10 @@ import java.util.*;
  */
 public class RandomKeyPressManager {
     
-    private static final Random RANDOM = new Random();
-    
     // 计时器状态
     private static int tickTimer = 0;
     private static int nextTriggerTicks = 0;
+    private static int configuredIntervalTicks = 0;
     private static boolean isEffectActive = false;
     
     /**
@@ -42,6 +36,10 @@ public class RandomKeyPressManager {
             }
             
             isEffectActive = true;
+            int currentIntervalTicks = intervalTicks();
+            if (configuredIntervalTicks != currentIntervalTicks) {
+                resetTimer();
+            }
             tickTimer++;
             
             // 检查是否到达触发时间
@@ -53,13 +51,16 @@ public class RandomKeyPressManager {
     }
     
     /**
-     * 重置计时器（2分钟固定间隔）
+     * 按服务端同步的间隔重置计时器。
      */
     private static void resetTimer() {
         tickTimer = 0;
-        // 2分钟 = 2400 ticks (20 ticks/秒)
-        nextTriggerTicks = 2400;
-        System.out.println("电击中毒计时器重置：" + nextTriggerTicks + " ticks (2分钟)");
+        configuredIntervalTicks = intervalTicks();
+        nextTriggerTicks = configuredIntervalTicks;
+    }
+
+    private static int intervalTicks() {
+        return com.example.ChaosMod.config.randomKeyPressIntervalSeconds * 20;
     }
     
     /**
@@ -73,8 +74,6 @@ public class RandomKeyPressManager {
         if (client.player.isCreative() || client.player.isSpectator()) {
             return;
         }
-        
-        System.out.println("触发电击中毒效果");
         
         // 向服务端发送C2S数据包
         sendRandomKeyPressPacket();
@@ -95,7 +94,8 @@ public class RandomKeyPressManager {
      */
     public static void cleanup() {
         tickTimer = 0;
+        nextTriggerTicks = 0;
+        configuredIntervalTicks = 0;
         isEffectActive = false;
-        System.out.println("电击中毒系统已清理");
     }
 }

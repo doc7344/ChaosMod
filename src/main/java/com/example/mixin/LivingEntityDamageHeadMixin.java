@@ -17,6 +17,7 @@ public abstract class LivingEntityDamageHeadMixin {
     private void chaos$routeDamage(DamageSource source, float amount, CallbackInfoReturnable<Boolean> cir) {
         LivingEntity self = (LivingEntity)(Object)this;
         if (self.getWorld().isClient()) return;
+        if (DamageRouting.isDirectDamage()) return;
         
         
         // 延迟受伤：拦截伤害并延迟处理
@@ -43,6 +44,8 @@ public abstract class LivingEntityDamageHeadMixin {
             
             // Then check other damage routing
             if (DamageRouting.routePlayerDamage(player, source, amount)) {
+                // 路由已处理伤害；原受击者本次 damage 必须保持 false，避免它的
+                // PlayerEntity 尾部逻辑误判为真实受伤并再次触发盾牌削弱等效果。
                 cir.setReturnValue(false);
                 cir.cancel();
             }

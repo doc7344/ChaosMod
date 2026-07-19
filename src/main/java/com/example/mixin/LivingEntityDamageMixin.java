@@ -13,24 +13,27 @@ import net.minecraft.item.ItemStack;
 import net.minecraft.item.Items;
 import net.minecraft.server.network.ServerPlayerEntity;
 import net.minecraft.server.world.ServerWorld;
+import net.minecraft.util.math.Vec3d;
+import net.minecraft.world.TeleportTarget;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.Unique;
 import org.spongepowered.asm.mixin.injection.At;
 import org.spongepowered.asm.mixin.injection.Inject;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfoReturnable;
 
-import java.util.ArrayList;
-import java.util.List;
 import java.util.concurrent.ThreadLocalRandom;
+import java.util.Map;
+import java.util.WeakHashMap;
 
 @Mixin(LivingEntity.class)
 public abstract class LivingEntityDamageMixin {
     
     @Unique
     private static final ThreadLocal<Boolean> RANDOM_DAMAGE_REENTRY = ThreadLocal.withInitial(() -> false);
-    
     @Unique
-    private static final List<Float> damagePool = new ArrayList<>();
+    private static final Map<ServerPlayerEntity, Long> POSITION_SWAP_COOLDOWN = new WeakHashMap<>();
+    @Unique
+    private static final long POSITION_SWAP_COOLDOWN_TICKS = 2L;
     
     @Unique
     private static final float[] allDamageValues = {
@@ -40,23 +43,16 @@ public abstract class LivingEntityDamageMixin {
     
     @Inject(method = "damage", at = @At("HEAD"), cancellable = true)
     private void chaos$randomizeDamage(DamageSource source, float amount, CallbackInfoReturnable<Boolean> cir) {
+        LivingEntity entity = (LivingEntity)(Object)this;
+        if (entity.getWorld().isClient()) return;
+        if (DamageRouting.isDirectDamage()) return;
+
         // 随机伤害值效果：完全替换原版伤害值
         if (ChaosMod.config.randomDamageAmountEnabled) {
-            LivingEntity entity = (LivingEntity)(Object)this;
-            
             // 防止递归
             if (RANDOM_DAMAGE_REENTRY.get()) return;
             
-            // 初始化候选池（首次使用或池子为空时重置）
-            if (damagePool.isEmpty()) {
-                for (float value : allDamageValues) {
-                    damagePool.add(value);
-                }
-            }
-            
-            // 从候选池中随机抽取一个值并移除
-            int randomIndex = ThreadLocalRandom.current().nextInt(damagePool.size());
-            float randomDamage = damagePool.remove(randomIndex);
+            float randomDamage = allDamageValues[ThreadLocalRandom.current().nextInt(allDamageValues.length)];
             
             // 取消原版伤害处理
             cir.cancel();
@@ -64,8 +60,7 @@ public abstract class LivingEntityDamageMixin {
             // 置入递归抑制后直接调用damage并setReturnValue(true)
             try {
                 RANDOM_DAMAGE_REENTRY.set(true);
-                entity.damage(entity.getWorld().getDamageSources().generic(), randomDamage);
-                cir.setReturnValue(true);
+                cir.setReturnValue(entity.damage(source, randomDamage));
             } finally {
                 RANDOM_DAMAGE_REENTRY.set(false);
             }
@@ -75,10 +70,18 @@ public abstract class LivingEntityDamageMixin {
     @Inject(method = "damage", at = @At("TAIL"))
     private void chaos$afterDamage(DamageSource source, float amount, CallbackInfoReturnable<Boolean> cir) {
         LivingEntity victim = (LivingEntity)(Object)this;
+        if (victim.getWorld().isClient()) return;
+        if (DamageRouting.isDirectDamage()) return;
         Entity attacker = source.getAttacker();
 
+        if (attacker instanceof ServerPlayerEntity attackerPlayer) {
+            com.example.util.AdditionalChaosEffects.handleWeaponSlip(
+                attackerPlayer, victim, source, cir.getReturnValue()
+            );
+        }
+
         // Buffs when mob hits player + EnderDragon bucket conversion
-        if (victim instanceof PlayerEntity player && attacker instanceof MobEntity mob) {
+        if (cir.getReturnValue() && victim instanceof PlayerEntity player && attacker instanceof MobEntity mob) {
             if (!player.isCreative() && !player.isSpectator()) {
                 DamageRouting.applyOnHitEffects(player, mob);
                 if (ChaosMod.config.enderDragonBucketEnabled && attacker instanceof EnderDragonEntity) {
@@ -96,18 +99,6 @@ public abstract class LivingEntityDamageMixin {
         if (ChaosMod.config.mobThornsEnabled && victim instanceof MobEntity mob && attacker instanceof PlayerEntity player) {
             if (!player.isCreative() && !player.isSpectator() && amount > 0.0f) {
                 player.damage(player.getDamageSources().thorns(victim), amount * 0.5f);
-            }
-        }
-
-        // === 共享生命：若任一玩家死亡 -> 全员死亡（含受击者） ===
-        if (ChaosMod.config.sharedHealthEnabled && victim instanceof PlayerEntity v) {
-            if (v.getWorld().isClient()) return;
-            if (v.isDead() || v.getHealth() <= 0f) {
-                ServerWorld sw = (ServerWorld) v.getWorld();
-                List<ServerPlayerEntity> players = sw.getPlayers();
-                for (ServerPlayerEntity p : players) {
-                    if (!p.isDead()) p.kill();
-                }
             }
         }
 
@@ -129,48 +120,83 @@ public abstract class LivingEntityDamageMixin {
         if (ChaosMod.config.positionSwapEnabled && cir.getReturnValue() && 
             victim instanceof ServerPlayerEntity victimPlayer) {
             
-            if (!victimPlayer.isCreative() && !victimPlayer.isSpectator()) {
-                ServerWorld serverWorld = victimPlayer.getServerWorld();
-                List<ServerPlayerEntity> allPlayers = serverWorld.getPlayers();
-                
-                // 过滤出同世界的其他在线玩家
-                List<ServerPlayerEntity> validTargets = new ArrayList<>();
-                for (ServerPlayerEntity player : allPlayers) {
-                    if (player != victimPlayer && !player.isCreative() && !player.isSpectator() && 
-                        player.getWorld() == victimPlayer.getWorld()) {
-                        validTargets.add(player);
-                    }
-                }
+            long currentTick = victimPlayer.getServer().getTicks();
+            if (chaos$isPositionSwapEligible(victimPlayer, currentTick)) {
+                java.util.List<ServerPlayerEntity> validTargets = victimPlayer.getServer().getPlayerManager()
+                    .getPlayerList().stream()
+                    .filter(player -> player != victimPlayer)
+                    .filter(player -> chaos$isPositionSwapEligible(player, currentTick))
+                    .toList();
                 
                 if (!validTargets.isEmpty()) {
                     // 随机选择一个目标
                     ServerPlayerEntity target = validTargets.get(victimPlayer.getRandom().nextInt(validTargets.size()));
-                    
-                    // 保存双方位置信息
-                    double victimX = victimPlayer.getX();
-                    double victimY = victimPlayer.getY();
-                    double victimZ = victimPlayer.getZ();
-                    float victimYaw = victimPlayer.getYaw();
-                    float victimPitch = victimPlayer.getPitch();
-                    
-                    double targetX = target.getX();
-                    double targetY = target.getY();
-                    double targetZ = target.getZ();
-                    float targetYaw = target.getYaw();
-                    float targetPitch = target.getPitch();
-                    
-                    // 执行位置交换 - 每次受伤都触发  
-                    victimPlayer.teleport(targetX, targetY, targetZ, true);
-                    victimPlayer.setYaw(targetYaw);
-                    victimPlayer.setPitch(targetPitch);
-                    
-                    target.teleport(victimX, victimY, victimZ, true);
-                    target.setYaw(victimYaw);
-                    target.setPitch(victimPitch);
+                    chaos$swapPlayerPositions(victimPlayer, target, currentTick);
                 }
             }
         }
 
         // 背刺回血效果已移除，保持30个效果
+    }
+
+    @Unique
+    private static boolean chaos$isPositionSwapEligible(ServerPlayerEntity player, long currentTick) {
+        if (player == null || !player.isAlive() || player.isCreative() || player.isSpectator()) return false;
+        if (player.isDisconnected() || player.isRemoved() || player.isInTeleportationState()) return false;
+        Long cooldownUntil = POSITION_SWAP_COOLDOWN.get(player);
+        return cooldownUntil == null || currentTick >= cooldownUntil;
+    }
+
+    @Unique
+    private static void chaos$swapPlayerPositions(ServerPlayerEntity first, ServerPlayerEntity second, long currentTick) {
+        ServerWorld firstWorld = first.getServerWorld();
+        ServerWorld secondWorld = second.getServerWorld();
+        Vec3d firstPos = first.getPos();
+        Vec3d secondPos = second.getPos();
+        Vec3d firstVelocity = first.getVelocity();
+        Vec3d secondVelocity = second.getVelocity();
+        float firstYaw = first.getYaw();
+        float firstPitch = first.getPitch();
+        float secondYaw = second.getYaw();
+        float secondPitch = second.getPitch();
+
+        TeleportTarget firstDestination = new TeleportTarget(
+            secondWorld, secondPos, firstVelocity, secondYaw, secondPitch, TeleportTarget.NO_OP
+        );
+        TeleportTarget secondDestination = new TeleportTarget(
+            firstWorld, firstPos, secondVelocity, firstYaw, firstPitch, TeleportTarget.NO_OP
+        );
+
+        boolean firstMoved = first.teleportTo(firstDestination) != null
+            && chaos$isAtSwapDestination(first, secondWorld, secondPos);
+        boolean secondMoved = second.teleportTo(secondDestination) != null
+            && chaos$isAtSwapDestination(second, firstWorld, firstPos);
+        if (firstMoved && secondMoved) {
+            long cooldownUntil = currentTick + POSITION_SWAP_COOLDOWN_TICKS;
+            POSITION_SWAP_COOLDOWN.put(first, cooldownUntil);
+            POSITION_SWAP_COOLDOWN.put(second, cooldownUntil);
+            return;
+        }
+
+        System.err.println("[ChaosMod][PositionSwap] 交换失败，正在回滚: first="
+            + first.getName().getString() + " moved=" + firstMoved
+            + ", second=" + second.getName().getString() + " moved=" + secondMoved);
+
+        // 任一方失败时将已经移动的一方恢复，避免只交换一个玩家。
+        if (firstMoved) {
+            first.teleportTo(new TeleportTarget(
+                firstWorld, firstPos, firstVelocity, firstYaw, firstPitch, TeleportTarget.NO_OP
+            ));
+        }
+        if (secondMoved) {
+            second.teleportTo(new TeleportTarget(
+                secondWorld, secondPos, secondVelocity, secondYaw, secondPitch, TeleportTarget.NO_OP
+            ));
+        }
+    }
+
+    @Unique
+    private static boolean chaos$isAtSwapDestination(ServerPlayerEntity player, ServerWorld world, Vec3d pos) {
+        return player.getServerWorld() == world && player.getPos().squaredDistanceTo(pos) < 0.01D;
     }
 }

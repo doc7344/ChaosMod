@@ -54,7 +54,8 @@ public class DesktopFileManager {
         String baseFileName = com.example.config.LanguageManager.getDesktopContentByLanguage(playerLanguage, contentKey);
         String fileName = baseFileName + "_" + getCurrentTimestamp() + ".txt";
         
-        // 发送完整文件内容到客户端
+        // 先授权一次回执，再发送文件请求；客户端只能消费本次授权一次。
+        com.example.network.FourthWallDamageC2SPacket.authorize(player, "desktop_file", 2.0F);
         com.example.network.DesktopFileContentS2CPacket.send(player, fileName, fullContent, previousFile);
         
         // 只有在文件生成请求发送后才发送聊天提示（确保同步）
@@ -88,6 +89,7 @@ public class DesktopFileManager {
      */
     public static void cleanupPlayerData(UUID playerId) {
         playerCurrentFile.remove(playerId);
+        com.example.network.FourthWallDamageC2SPacket.cleanupPlayer(playerId);
     }
     
     /**

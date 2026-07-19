@@ -37,10 +37,10 @@ public class AIEffectCombinations {
         ));
         
         ALL_COMBINATIONS.add(new EffectCombination(
-            "[生死共享] 生死与共组合",
-            "团队绑定，一人死亡全员死亡！",
+            "[生命共享] 同命同饿组合",
+            "团队共享同一生命与饥饿状态！",
             new String[]{"sharedHealthEnabled", "mobIgniteEnabled", "shieldNerfEnabled", "mobSlownessEnabled"},
-            "AI为你推荐：生死与共组合 - 和朋友一起享受团队灭绝！"
+            "AI为你推荐：同命同饿组合 - 一个人挨饿，全队都挨饿！"
         ));
         
         ALL_COMBINATIONS.add(new EffectCombination(

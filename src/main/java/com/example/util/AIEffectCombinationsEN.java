@@ -21,10 +21,10 @@ public class AIEffectCombinationsEN {
         ));
         
         ALL_COMBINATIONS_EN.add(new AIEffectCombinations.EffectCombination(
-            "[Life Share] Life and Death Together",
-            "Team binding, one dies all die!",
+            "[Life Share] Shared Vitality",
+            "The team shares one health and hunger state!",
             new String[]{"sharedHealthEnabled", "mobIgniteEnabled", "shieldNerfEnabled", "mobSlownessEnabled"},
-            "AI Recommends: Life and Death Together - Enjoy team extinction with friends!"
+            "AI Recommends: Shared Vitality - One player starves, everyone starves!"
         ));
         
         ALL_COMBINATIONS_EN.add(new AIEffectCombinations.EffectCombination(

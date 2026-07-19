@@ -5,13 +5,6 @@ import net.minecraft.entity.EntityType;
 public final class ThreatProfiles {
     private ThreatProfiles() {}
 
-    public static double chaseSpeed(EntityType<?> type) {
-        if (type == EntityType.WARDEN) return 1.35;
-        if (type == EntityType.IRON_GOLEM) return 1.10;
-        if (type == EntityType.RAVAGER) return 1.15;
-        return 1.10;
-    }
-
     public static double extraReach(EntityType<?> type) {
         if (type == EntityType.WARDEN) return 0.80;
         if (type == EntityType.RAVAGER) return 0.45;

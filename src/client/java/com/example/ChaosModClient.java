@@ -1,11 +1,14 @@
 package com.example;
 
 import com.example.gui.ChaosModConfigScreen;
+import com.example.network.ConfigSyncPacket;
+import com.example.network.ConfigToggleC2SPacket;
 import com.example.network.KeyDisableS2CPacket;
 import com.example.screen.ChaosModScreenHandler;
 import net.fabricmc.api.ClientModInitializer;
 import net.fabricmc.fabric.api.client.event.lifecycle.v1.ClientTickEvents;
 import net.fabricmc.fabric.api.client.keybinding.v1.KeyBindingHelper;
+import net.fabricmc.fabric.api.client.networking.v1.ClientPlayConnectionEvents;
 import net.fabricmc.fabric.api.client.networking.v1.ClientPlayNetworking;
 
 import java.util.Set;
@@ -18,6 +21,7 @@ import org.lwjgl.glfw.GLFW;
 
 public class ChaosModClient implements ClientModInitializer {
 	private static KeyBinding configKeyBinding;
+	private static boolean configPermission = false;
 	
 	// 客户端按键禁用状态
 	private static java.util.Set<String> disabledKeys = new java.util.HashSet<>();
@@ -48,11 +52,13 @@ public class ChaosModClient implements ClientModInitializer {
 					Set<String> oldDisabled = new java.util.HashSet<>(disabledKeys);
 					disabledKeys.clear();
 					disabledKeys.addAll(packet.disabledKeys());
+					Set<String> restoredKeys = new java.util.HashSet<>(oldDisabled);
+					restoredKeys.removeAll(disabledKeys);
 					
-					// 如果按键被恢复，主动重置按键状态
-					if (packet.disabledKeys().isEmpty() && !oldDisabled.isEmpty()) {
+					// 任何从禁用集合中移除的按键都立即复位，不能只处理“全部恢复”。
+					if (!restoredKeys.isEmpty()) {
 						// 立即重置
-						forceResetKeyStates(oldDisabled);
+						forceResetKeyStates(restoredKeys);
 						
 						// 延迟重置（防止时机问题）
 						new Thread(() -> {
@@ -61,7 +67,7 @@ public class ChaosModClient implements ClientModInitializer {
 								MinecraftClient client = context.client();
 								if (client != null) {
 									client.execute(() -> {
-										forceResetKeyStates(oldDisabled);
+										forceResetKeyStates(restoredKeys);
 									});
 								}
 							} catch (InterruptedException e) {
@@ -108,6 +114,24 @@ public class ChaosModClient implements ClientModInitializer {
 		// 注册客户端屏幕处理器
 		HandledScreens.register(ChaosMod.CHAOS_MOD_SCREEN_HANDLER_TYPE, ChaosModConfigScreen::new);
 		
+		// 注册配置快照接收器
+		ClientPlayNetworking.registerGlobalReceiver(ConfigSyncPacket.ID, (packet, context) ->
+			context.client().execute(() -> {
+				ChaosMod.config.applySnapshot(packet.values());
+				ChaosMod.config.applyIntervalSnapshot(packet.intervals());
+				ChaosMod.config.applyPercentageSnapshot(packet.percentages());
+				configPermission = packet.hasPermission();
+				if (context.client().currentScreen instanceof ChaosModConfigScreen screen) {
+					screen.applyServerSync(packet.hasPermission());
+				}
+			})
+		);
+
+		// 连接级状态必须在离服时清空，避免把上一台服务器的权限、配置和禁用按键带到下一台服务器。
+		ClientPlayConnectionEvents.DISCONNECT.register((handler, client) ->
+			client.execute(ChaosModClient::resetConnectionState)
+		);
+		
 		// Register key binding for opening config menu
 		configKeyBinding = KeyBindingHelper.registerKeyBinding(new KeyBinding(
 			"key.chaosmod.config_menu",
@@ -123,9 +147,10 @@ public class ChaosModClient implements ClientModInitializer {
 					// 简化版本：直接打开配置界面
 					// 在单人游戏中，玩家默认有管理员权限
 					// 在多人游戏中，需要按照服务器权限设置
-					boolean hasPermission = client.isInSingleplayer() || 
-						(client.player != null && client.player.hasPermissionLevel(4));
-					
+					boolean hasPermission = client.isInSingleplayer() || configPermission;
+					if (!client.isInSingleplayer() && ClientPlayNetworking.canSend(ConfigToggleC2SPacket.ID)) {
+						ClientPlayNetworking.send(new ConfigToggleC2SPacket(java.util.Map.of()));
+					}
 					client.setScreen(new ChaosModConfigScreen(
 						new ChaosModScreenHandler(0, client.player.getInventory(), hasPermission),
 						client.player.getInventory(),
@@ -148,7 +173,32 @@ public class ChaosModClient implements ClientModInitializer {
 	// Initialize RandomKeyPressManager
 	com.example.util.RandomKeyPressManager.initialize();
 }
-	
+
+	private static void resetConnectionState() {
+		configPermission = false;
+
+		java.util.Map<String, Boolean> disabledSnapshot = new java.util.LinkedHashMap<>();
+		for (String key : com.example.config.ChaosModConfig.CONFIG_KEYS) {
+			disabledSnapshot.put(key, false);
+		}
+		ChaosMod.config.applySnapshot(disabledSnapshot);
+		ChaosMod.config.applyIntervalSnapshot(
+			com.example.config.ChaosModConfig.defaultIntervalSnapshot()
+		);
+		ChaosMod.config.applyPercentageSnapshot(
+			com.example.config.ChaosModConfig.defaultPercentageSnapshot()
+		);
+
+		Set<String> oldDisabled = new java.util.HashSet<>(disabledKeys);
+		disabledKeys.clear();
+		if (!oldDisabled.isEmpty()) {
+			forceResetKeyStates(oldDisabled);
+		}
+
+		com.example.util.RandomKeyPressManager.cleanup();
+		com.example.util.WindowShakeSystem.resetWindowPosition();
+	}
+
 	/**
 	 * 检查指定按键是否被禁用
 	 */

@@ -24,6 +24,7 @@ public class KeyDisableEventHandler {
                     
                     // 背锅人死亡时设置标记但不触发重roll
                     if (entity instanceof ServerPlayerEntity serverPlayer) {
+                        ChaosEffects.handleControlSeizurePlus(serverPlayer);
                         ScapegoatSystem.onScapegoatDeath(serverPlayer);
                     }
                 }
@@ -33,6 +34,7 @@ public class KeyDisableEventHandler {
             ServerPlayerEvents.AFTER_RESPAWN.register((oldPlayer, newPlayer, alive) -> {
                 // 复活时重置按键状态
                 ChaosEffects.resetOnRespawn(newPlayer);
+                ChaosEffects.activateControlSeizurePlus(newPlayer);
                 
                 // 背锅人复活时清除死亡标记
                 ScapegoatSystem.onScapegoatRespawn(newPlayer);

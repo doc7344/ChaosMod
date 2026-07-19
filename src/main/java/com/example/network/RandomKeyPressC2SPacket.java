@@ -10,9 +10,9 @@ import net.minecraft.server.network.ServerPlayerEntity;
 import net.minecraft.text.Text;
 import net.minecraft.util.Identifier;
 
-import java.util.Arrays;
-import java.util.List;
-import java.util.Random;
+import java.util.Map;
+import java.util.UUID;
+import java.util.concurrent.ConcurrentHashMap;
 
 /**
  * 随机按键癫痫 - C2S数据包
@@ -24,7 +24,7 @@ public record RandomKeyPressC2SPacket() implements CustomPayload {
         buf -> new RandomKeyPressC2SPacket() // 读取
     );
     
-    private static final Random RANDOM = new Random();
+    private static final Map<UUID, Long> LAST_TRIGGER_TICK = new ConcurrentHashMap<>();
     
     
     @Override
@@ -58,6 +58,15 @@ public record RandomKeyPressC2SPacket() implements CustomPayload {
         if (player.isCreative() || player.isSpectator()) {
             return;
         }
+
+        long currentTick = player.getServer().getTicks();
+        long triggerCooldownTicks = ChaosMod.config.randomKeyPressIntervalSeconds * 20L;
+        Long lastTrigger = LAST_TRIGGER_TICK.get(player.getUuid());
+        if (lastTrigger != null && currentTick >= lastTrigger
+                && currentTick - lastTrigger < triggerCooldownTicks) {
+            return;
+        }
+        LAST_TRIGGER_TICK.put(player.getUuid(), currentTick);
         
         // 扣除血量 1.0F = 0.5♥
         player.damage(player.getDamageSources().generic(), 1.0F);
@@ -73,7 +82,6 @@ public record RandomKeyPressC2SPacket() implements CustomPayload {
         String message = LanguageManager.getMessage("electric_poison_damage");
         player.sendMessage(Text.literal(message).formatted(net.minecraft.util.Formatting.DARK_PURPLE, net.minecraft.util.Formatting.BOLD), false);
         
-        System.out.println("电击中毒效果触发：" + player.getName().getString() + " - " + message);
     }
     
     /**
@@ -81,5 +89,9 @@ public record RandomKeyPressC2SPacket() implements CustomPayload {
      */
     public static void sendToServer() {
         // 这个方法将在客户端代码中调用
+    }
+
+    public static void cleanupPlayer(UUID playerId) {
+        LAST_TRIGGER_TICK.remove(playerId);
     }
 }
